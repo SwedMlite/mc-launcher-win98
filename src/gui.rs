@@ -59,7 +59,6 @@ pub fn create_new_profile_dialog(text_font: Font) -> Option<Profile> {
 
     win.end();
 
-    // Use a shared Arc<Mutex<>> to store the result
     let result = Arc::new(Mutex::new(None::<Profile>));
     
     let result_clone = result.clone();
@@ -79,15 +78,13 @@ pub fn create_new_profile_dialog(text_font: Font) -> Option<Profile> {
     #[cfg(target_os = "windows")]
     adjust_window(&mut win);
     
-    // Simple event loop with timeout
     let start_time = std::time::Instant::now();
-    let timeout = std::time::Duration::from_secs(5); // 5 second timeout
+    let timeout = std::time::Duration::from_secs(5);
     
     while win.shown() && start_time.elapsed() < timeout {
-        app::wait_for(0.05); // Wait for 50ms each iteration, then check again
+        app::wait_for(0.05);
         
         if win.visible() && username_input.changed() {
-            // Capture any text changes
             let new_value = username_input.value();
             if !new_value.trim().is_empty() {
                 *result.lock().unwrap() = Some(Profile { username: new_value.trim().to_string() });
@@ -95,12 +92,10 @@ pub fn create_new_profile_dialog(text_font: Font) -> Option<Profile> {
         }
     }
     
-    // Make sure window is hidden (in case of timeout)
     if win.shown() {
         win.hide();
     }
     
-    // Return the profile if one was created
     result.lock().unwrap().clone()
 }
 
@@ -133,7 +128,6 @@ pub fn edit_profile_dialog(text_font: Font, profile: &Profile) -> Option<Profile
     save_button.set_frame(FrameType::UpBox);
     save_button.set_color(Color::from_rgb(192, 192, 192));
     
-    // Simple title bar with no images to reduce complexity
     let mut title_frame = Frame::new(0, 0, 300, 24, "Edit Profile");
     title_frame.set_frame(FrameType::FlatBox);
     title_frame.set_color(Color::from_rgb(0, 0, 128));
@@ -142,7 +136,6 @@ pub fn edit_profile_dialog(text_font: Font, profile: &Profile) -> Option<Profile
     
     win.end();
     
-    // Use a shared Arc<Mutex<>> to store the result
     let result = Arc::new(Mutex::new(None::<Profile>));
     
     let username_input_clone = username_input.clone();
@@ -161,15 +154,13 @@ pub fn edit_profile_dialog(text_font: Font, profile: &Profile) -> Option<Profile
     #[cfg(target_os = "windows")]
     adjust_window(&mut win);
     
-    // Simple event loop with timeout
     let start_time = std::time::Instant::now();
-    let timeout = std::time::Duration::from_secs(5); // 5 second timeout
+    let timeout = std::time::Duration::from_secs(5);
     
     while win.shown() && start_time.elapsed() < timeout {
-        app::wait_for(0.05); // Wait for 50ms each iteration, then check again
+        app::wait_for(0.05);
         
         if win.visible() && username_input.changed() {
-            // Capture any text changes
             let new_value = username_input.value();
             if !new_value.trim().is_empty() {
                 *result.lock().unwrap() = Some(Profile { username: new_value.trim().to_string() });
@@ -177,12 +168,10 @@ pub fn edit_profile_dialog(text_font: Font, profile: &Profile) -> Option<Profile
         }
     }
     
-    // Make sure window is hidden (in case of timeout)
     if win.shown() {
         win.hide();
     }
     
-    // Return the username if it was changed
     result.lock().unwrap().clone()
 }
 
@@ -202,19 +191,16 @@ pub fn show_error_dialog(message: &str, text_font: Font) {
     let screen_height = app::screen_size().1 as i32;
     dialog.set_pos((screen_width - 300) / 2, (screen_height - 125) / 2);
 
-    // Simple background
     let mut bg = Frame::new(0, 0, 300, 125, "");
     bg.set_frame(FrameType::FlatBox);
     bg.set_color(Color::from_rgb(192, 192, 192));
 
-    // Simple title bar
     let mut title_frame = Frame::new(0, 0, 300, 24, "Error");
     title_frame.set_frame(FrameType::FlatBox);
-    title_frame.set_color(Color::from_rgb(128, 0, 0)); // Red title bar for error
+    title_frame.set_color(Color::from_rgb(128, 0, 0));
     title_frame.set_label_color(Color::White);
     title_frame.set_label_font(text_font);
 
-    // Simple error icon (text instead of image)
     let mut error_icon = Frame::new(20, 50, 32, 32, "!");
     error_icon.set_label_font(text_font);
     error_icon.set_label_size(24);
@@ -256,15 +242,13 @@ pub fn show_error_dialog(message: &str, text_font: Font) {
     #[cfg(target_os = "windows")]
     adjust_window(&mut dialog);
     
-    // Process events with a timeout
     let start_time = std::time::Instant::now();
-    let timeout = std::time::Duration::from_secs(5); // 5 second timeout
+    let timeout = std::time::Duration::from_secs(5);
     
     while dialog.shown() && start_time.elapsed() < timeout {
         app::wait_for(0.05);
     }
     
-    // Make sure dialog is hidden in case of timeout
     if dialog.shown() {
         dialog.hide();
     }

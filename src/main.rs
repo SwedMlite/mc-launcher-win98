@@ -18,7 +18,6 @@ fn main() {
 
     let app = app::App::default();
     
-    // Загружаем шрифт для всего приложения
     let font = setup_font(app, "ms-sans-serif-1.ttf");
 
     let mut win = Window::new(100, 100, WIN_WIDTH, WIN_HEIGHT, "Minecraft Launcher");
@@ -53,7 +52,6 @@ fn main() {
     .map(|p| p.username.clone())
     .collect();
     
-    // Get all Java installations for the dropdown
     let java_installations = find_all_java_installations();
     
 let (

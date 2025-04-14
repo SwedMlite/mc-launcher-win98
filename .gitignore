@@ -1,3 +1,5 @@
 /game
 /target
 /Cargo.lock
+*.ttf
+*.png
