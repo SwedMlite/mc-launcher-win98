@@ -132,7 +132,9 @@ pub fn launch_minecraft(
             .arg("--accessToken")
             .arg("0")
             .arg("--uuid")
-            .arg("00000000-0000-0000-0000-000000000000");
+            .arg("00000000-0000-0000-0000-000000000000")
+            .arg("--userProperties")
+            .arg("{}");
     }
 
     launch_cmd.stdout(std::process::Stdio::piped());
