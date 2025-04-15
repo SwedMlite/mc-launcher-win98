@@ -119,7 +119,7 @@ win.end();
 win.show();
 
 #[cfg(target_os = "windows")]
-adjust_window(&mut win);
+adjust_window(&win);
 
     {
         let _profiles = profiles.clone();

@@ -55,7 +55,7 @@ pub fn create_new_profile_dialog(text_font: Font) -> Option<Profile> {
     create_button.set_color(Color::from_rgb(192, 192, 192));
 
     setup_frame(win.width(), win.height());
-    setup_title_bar("New Profile", &mut load_image_from_data!("minecraft_icon.png").unwrap(), text_font, &mut win);
+    setup_title_bar("New Profile", &mut load_image_from_data!("minecraft_icon.png").unwrap(), text_font, &win);
 
     win.end();
 
@@ -76,13 +76,13 @@ pub fn create_new_profile_dialog(text_font: Font) -> Option<Profile> {
     handle_drag(&mut win);
 
     #[cfg(target_os = "windows")]
-    adjust_window(&mut win);
+    adjust_window(&win);
     
     let start_time = std::time::Instant::now();
     let timeout = std::time::Duration::from_secs(5);
     
     while win.shown() && start_time.elapsed() < timeout {
-        app::wait_for(0.05);
+        let _ = app::wait_for(0.05);
         
         if win.visible() && username_input.changed() {
             let new_value = username_input.value();
@@ -152,13 +152,13 @@ pub fn edit_profile_dialog(text_font: Font, profile: &Profile) -> Option<Profile
     win.show();
     
     #[cfg(target_os = "windows")]
-    adjust_window(&mut win);
+    adjust_window(&win);
     
     let start_time = std::time::Instant::now();
     let timeout = std::time::Duration::from_secs(5);
     
     while win.shown() && start_time.elapsed() < timeout {
-        app::wait_for(0.05);
+        let _ = app::wait_for(0.05);
         
         if win.visible() && username_input.changed() {
             let new_value = username_input.value();
@@ -240,13 +240,13 @@ pub fn show_error_dialog(message: &str, text_font: Font) {
     dialog.show();
 
     #[cfg(target_os = "windows")]
-    adjust_window(&mut dialog);
+    adjust_window(&dialog);
     
     let start_time = std::time::Instant::now();
     let timeout = std::time::Duration::from_secs(5);
     
     while dialog.shown() && start_time.elapsed() < timeout {
-        app::wait_for(0.05);
+        let _ = app::wait_for(0.05);
     }
     
     if dialog.shown() {
@@ -459,7 +459,7 @@ pub fn setup_main_controls(text_font: Font, versions: String, profile_names: &Ve
     profile_choice.set_text_size(12);
 
     for name in profile_names {
-        profile_choice.add_choice(&name);
+        profile_choice.add_choice(name);
     }
     if !profile_names.is_empty() {
         profile_choice.set_value(0);
@@ -582,7 +582,7 @@ pub fn setup_title_bar(
     title: &str,
     ico: &mut PngImage,
     font: Font,
-    win: &fltk::window::Window,
+    win: &Window,
 ) {
     let win_width = win.width();
     

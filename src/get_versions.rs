@@ -9,7 +9,6 @@ use std::collections::HashMap;
 use std::io;
 use std::io::{BufReader,BufWriter};
 use zip::ZipArchive;
-use regex;
 
 #[derive(Debug, Deserialize)]
 pub struct VersionManifest {
@@ -24,6 +23,7 @@ pub struct AssetIndex {
 
 #[derive(Debug, Deserialize)]
 pub struct JavaVersion {
+    #[allow(dead_code)]
     pub component: String,
     #[serde(rename = "majorVersion")]
     pub major_version: u32,
@@ -38,8 +38,8 @@ pub struct VersionData {
     pub main_class: String,
     #[serde(rename = "assetIndex")]
     pub asset_index: AssetIndex,
-    #[serde(default)]
-    pub javaVersion: Option<JavaVersion>,
+    #[serde(default, rename = "javaVersion")]
+    pub java_version: Option<JavaVersion>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -160,7 +160,7 @@ pub fn get_version_ids() -> String {
         }
         Err(e) => eprintln!("Failed to fetch versions: {}", e),
     }
-    return versions;
+    versions
 }
 
 pub fn get_version_link(version_id: String) -> Option<String> {
@@ -330,7 +330,7 @@ fn should_use_library(library: &Library) -> bool {
 
 pub fn download_and_extract_assets(
     version_data: &VersionData, 
-    game_dir: &PathBuf
+    game_dir: &Path
 ) -> Result<(), Box<dyn Error>> {
     let asset_index_url = &version_data.asset_index.url;
     let asset_index_id = &version_data.asset_index.id;
@@ -524,7 +524,7 @@ pub fn launch_minecraft(
     classpath.push_str(&jar_path.to_string_lossy());
     for path in &library_paths {
         #[cfg(target_os = "windows")]
-        classpath.push_str(";");
+        classpath.push(';');
         #[cfg(not(target_os = "windows"))]
         classpath.push_str(":");
         classpath.push_str(&path.to_string_lossy());
@@ -538,7 +538,7 @@ pub fn launch_minecraft(
 
     let is_alpha_or_beta = version_id.starts_with("a") || version_id.starts_with("b");
     
-    let (required_java_version, strict_match) = match &version_data.javaVersion {
+    let (required_java_version, strict_match) = match &version_data.java_version {
         Some(java_version) => (java_version.major_version, false),
         None => {
             if is_alpha_or_beta || 
@@ -793,9 +793,7 @@ fn find_compatible_java(required_version: u32, strict_match: bool) -> Option<Pat
     let default_java = if cfg!(windows) { "java.exe" } else { "java" };
     if let Some(version) = get_java_version(&PathBuf::from(default_java)) {
         println!("System Java version: {}", version);
-        if version == required_version {
-            return Some(PathBuf::from(default_java));
-        } else if !strict_match && version > required_version {
+        if version == required_version || (!strict_match && version > required_version) {
             return Some(PathBuf::from(default_java));
         }
     }
@@ -813,7 +811,7 @@ fn find_java_executables(dir: &str) -> Vec<PathBuf> {
             if path.is_dir() {
                 let mut sub_results = find_java_executables(&path.to_string_lossy());
                 result.append(&mut sub_results);
-            } else if path.file_name().map_or(false, |name| name == java_exe_name) {
+            } else if path.file_name().is_some_and(|name| name == java_exe_name) {
                 result.push(path);
             }
         }
