@@ -1,8 +1,9 @@
 use crate::models::{AssetIndexData, Extract, Library, VersionData};
+use rayon::ThreadPoolBuilder;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::error::Error;
 use std::fs::{self, File};
-use std::io;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use zip::ZipArchive;
 
@@ -10,7 +11,13 @@ pub fn download_file(url: &str, dest_path: &Path) -> Result<(), Box<dyn Error>> 
     if dest_path.exists() {
         return Ok(());
     }
-    let response = reqwest::blocking::get(url)?;
+
+    let client = reqwest::blocking::Client::builder()
+        .pool_max_idle_per_host(10)
+        .tcp_keepalive(Some(std::time::Duration::from_secs(30)))
+        .build()?;
+
+    let response = client.get(url).send()?;
     if !response.status().is_success() {
         return Err(Box::new(io::Error::new(
             io::ErrorKind::Other,
@@ -18,34 +25,55 @@ pub fn download_file(url: &str, dest_path: &Path) -> Result<(), Box<dyn Error>> 
         )));
     }
 
+    if let Some(parent) = dest_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
     let mut dest_file = File::create(dest_path)?;
     let bytes = response.bytes()?;
-    io::copy(&mut &bytes[..], &mut dest_file)?;
+    dest_file.write_all(&bytes)?;
+
     Ok(())
 }
 
 pub fn download_libraries(
     version_data: &VersionData,
     libraries_dir: &Path,
+    mut progress_callback: Option<&mut dyn FnMut(usize, usize, &str)>,
 ) -> Result<Vec<PathBuf>, Box<dyn Error>> {
     let mut classpath = Vec::new();
     fs::create_dir_all(libraries_dir)?;
 
-    for library in &version_data.libraries {
-        if !should_use_library(library) {
-            continue;
+    let libraries_to_download: Vec<&Library> = version_data
+        .libraries
+        .iter()
+        .filter(|lib| should_use_library(lib))
+        .collect();
+
+    let total = libraries_to_download.len();
+
+    for (i, library) in libraries_to_download.iter().enumerate() {
+        let name = library
+            .downloads
+            .as_ref()
+            .and_then(|d| d.artifact.as_ref())
+            .map(|a| a.path.clone())
+            .unwrap_or_else(|| "Unknown library".to_string());
+
+        if let Some(ref mut callback) = progress_callback {
+            callback(i, total, &name);
         }
 
         if let Some(downloads) = &library.downloads {
             if let Some(artifact) = &downloads.artifact {
                 let library_path = libraries_dir.join(&artifact.path);
-                if let Some(parent) = library_path.parent() {
-                    fs::create_dir_all(parent)?;
-                }
                 if !library_path.exists() {
-                    download_file(&artifact.url, &library_path)?;
+                    if let Ok(_) = download_file(&artifact.url, &library_path) {
+                        classpath.push(library_path);
+                    }
+                } else {
+                    classpath.push(library_path);
                 }
-                classpath.push(library_path);
             }
         }
     }
@@ -127,7 +155,10 @@ fn extract_natives_from_jar(
 pub fn download_and_extract_assets(
     version_data: &VersionData,
     game_dir: &Path,
+    progress_callback: Option<impl Fn(usize, usize, &str) + Send + Sync>,
 ) -> Result<(), Box<dyn Error>> {
+    let _ = ThreadPoolBuilder::new().num_threads(16).build_global();
+
     let asset_index_url = &version_data.asset_index.url;
     let asset_index_id = &version_data.asset_index.id;
     let assets_dir = game_dir.join("assets");
@@ -170,49 +201,151 @@ pub fn download_and_extract_assets(
         })
         .collect();
 
-    assets_to_download
-        .par_iter()
-        .for_each(|(url, dest, virtual_path)| {
-            if let Some(parent) = dest.parent() {
-                if let Err(_) = fs::create_dir_all(parent) {
-                    return;
+    let _total_assets = assets_to_download.len();
+    let counter = std::sync::atomic::AtomicUsize::new(0);
+
+    let required_assets: Vec<_> = assets_to_download
+        .iter()
+        // Фильтруем только самые важные ассеты для запуска
+        .filter(|(_, _, path)| {
+            path.contains("minecraft/sounds/ui/")
+                || path.contains("minecraft/sounds/random/click")
+                || path.contains("minecraft/lang/")
+                || path.contains("minecraft/textures/gui/")
+                || path.contains("minecraft/font/")
+        })
+        .collect();
+
+    if !required_assets.is_empty() {
+        let required_total = required_assets.len();
+
+        required_assets
+            .par_iter()
+            .for_each(|(url, dest, virtual_path)| {
+                let current = counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+
+                if let Some(callback) = &progress_callback {
+                    callback(
+                        current.min(required_total),
+                        required_total,
+                        &format!("Required: {}", virtual_path),
+                    );
                 }
-            }
 
-            if !dest.exists() {
-                if let Err(_) = download_file(url, dest) {
-                    return;
-                }
-            }
-
-            if is_legacy {
-                let legacy_file_path = legacy_dir.join(virtual_path);
-
-                if let Some(parent) = legacy_file_path.parent() {
+                if let Some(parent) = dest.parent() {
                     if let Err(_) = fs::create_dir_all(parent) {
                         return;
                     }
                 }
 
-                if !legacy_file_path.exists() {
-                    let _ = fs::copy(dest, &legacy_file_path);
-                }
-            } else if asset_index_id == "1.7.10"
-                || asset_index_id.parse::<f32>().unwrap_or(0.0) <= 1.8
-            {
-                let resource_file_path = resource_dir.join(virtual_path);
-
-                if let Some(parent) = resource_file_path.parent() {
-                    if let Err(_) = fs::create_dir_all(parent) {
+                if !dest.exists() {
+                    if let Err(_) = download_file(url, dest) {
                         return;
                     }
                 }
 
-                if !resource_file_path.exists() {
-                    let _ = fs::copy(dest, &resource_file_path);
+                if is_legacy {
+                    let legacy_file_path = legacy_dir.join(virtual_path);
+
+                    if let Some(parent) = legacy_file_path.parent() {
+                        if let Err(_) = fs::create_dir_all(parent) {
+                            return;
+                        }
+                    }
+
+                    if !legacy_file_path.exists() {
+                        let _ = fs::copy(dest, &legacy_file_path);
+                    }
+                } else if asset_index_id == "1.7.10"
+                    || asset_index_id.parse::<f32>().unwrap_or(0.0) <= 1.8
+                {
+                    let resource_file_path = resource_dir.join(virtual_path);
+
+                    if let Some(parent) = resource_file_path.parent() {
+                        if let Err(_) = fs::create_dir_all(parent) {
+                            return;
+                        }
+                    }
+
+                    if !resource_file_path.exists() {
+                        let _ = fs::copy(dest, &resource_file_path);
+                    }
                 }
+            });
+    }
+
+    if let Some(callback) = &progress_callback {
+        callback(100, 100, "Required assets downloaded. Launching game...");
+    }
+
+    let remaining_assets: Vec<(String, PathBuf, String)> = assets_to_download
+        .into_iter()
+        .filter(|(_, dest, _)| !dest.exists())
+        .collect();
+
+    if !remaining_assets.is_empty() {
+        let _objects_dir_clone = objects_dir.to_path_buf();
+        let legacy_dir_clone = legacy_dir.to_path_buf();
+        let resource_dir_clone = resource_dir.to_path_buf();
+        let asset_index_id_clone = asset_index_id.to_string();
+        let is_legacy_clone = is_legacy;
+
+        std::thread::spawn(move || {
+            if remaining_assets.is_empty() {
+                return;
             }
+
+            let _remaining_total = remaining_assets.len();
+            let remaining_counter = std::sync::atomic::AtomicUsize::new(0);
+
+            remaining_assets
+                .par_iter()
+                .for_each(|(url, dest, virtual_path)| {
+                    let _current =
+                        remaining_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+
+                    if let Some(parent) = dest.parent() {
+                        if let Err(_) = fs::create_dir_all(parent) {
+                            return;
+                        }
+                    }
+
+                    if !dest.exists() {
+                        if let Err(_) = download_file(url, dest) {
+                            return;
+                        }
+                    }
+
+                    if is_legacy_clone {
+                        let legacy_file_path = legacy_dir_clone.join(virtual_path);
+
+                        if let Some(parent) = legacy_file_path.parent() {
+                            if let Err(_) = fs::create_dir_all(parent) {
+                                return;
+                            }
+                        }
+
+                        if !legacy_file_path.exists() {
+                            let _ = fs::copy(dest, &legacy_file_path);
+                        }
+                    } else if asset_index_id_clone == "1.7.10"
+                        || asset_index_id_clone.parse::<f32>().unwrap_or(0.0) <= 1.8
+                    {
+                        let resource_file_path = resource_dir_clone.join(virtual_path);
+
+                        if let Some(parent) = resource_file_path.parent() {
+                            if let Err(_) = fs::create_dir_all(parent) {
+                                return;
+                            }
+                        }
+
+                        if !resource_file_path.exists() {
+                            let _ = fs::copy(dest, &resource_file_path);
+                        }
+                    }
+                });
         });
+    }
 
     Ok(())
 }

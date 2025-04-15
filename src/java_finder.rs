@@ -1,6 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command,Stdio};
+use std::process::{Command, Stdio};
 
 pub fn find_all_java_installations() -> Vec<(PathBuf, String)> {
     let mut java_installations = Vec::new();
@@ -255,7 +255,7 @@ fn find_java_executables(dir: &str) -> Vec<PathBuf> {
     result
 }
 
-fn get_java_full_version(java_path: &Path) -> Option<String> {
+pub fn get_java_full_version(java_path: &Path) -> Option<String> {
     let mut command = Command::new(java_path);
     command.arg("-version");
 
@@ -294,7 +294,7 @@ fn get_java_full_version(java_path: &Path) -> Option<String> {
     None
 }
 
-fn get_java_version(java_path: &Path) -> Option<u32> {
+pub fn get_java_version(java_path: &Path) -> Option<u32> {
     if let Some(full_version) = get_java_full_version(java_path) {
         if full_version.starts_with("1.") {
             if let Some(minor) = full_version.split('.').nth(1) {

@@ -5,7 +5,7 @@ use fltk::{
     frame::Frame,
     image::PngImage,
     input::Input,
-    menu,
+    menu::Choice,
     prelude::*,
     window::Window,
 };
@@ -15,18 +15,19 @@ macro_rules! load_image_from_data {
         PngImage::from_data(include_bytes!($path))
     };
 }
+
 use crate::java_finder::find_all_java_installations;
 use crate::models::Profile;
+use std::process::Command;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::process::Command;
 
 #[cfg(target_os = "windows")]
 use crate::windows::adjust_window;
 
 pub const WIN_WIDTH: i32 = 600;
-pub const WIN_HEIGHT: i32 = 225;
+pub const WIN_HEIGHT: i32 = 275;
 
 static DIALOG_RUNNING: AtomicBool = AtomicBool::new(false);
 
@@ -295,11 +296,29 @@ pub fn setup_font(app: app::App, _font_path: &str) -> Font {
 }
 
 pub fn show_error_dialog(message: &str, text_font: Font) {
+    let display_message = if message.contains("JVM allocation heap")
+        || message.contains("heap space")
+    {
+        "Not enough memory to start Minecraft. Try closing other programs or increasing the memory allocation in the profile settings."
+    } else if message.contains("java.lang.ClassNotFoundException") {
+        "Could not find the required Java class. The Java installation may be corrupted or incompatible."
+    } else if message.contains("java.io.IOException") {
+        "I/O error. Check if you have write permissions to the game directory and if there is enough space on the disk."
+    } else if message.contains("java.lang.OutOfMemoryError") {
+        "Not enough memory to start Minecraft. Try closing other programs or increasing the memory allocation."
+    } else if message.contains("exited immediately") || message.contains("crashed during startup") {
+        "Minecraft exited with an error when starting. This may be due to Java version incompatibility, insufficient system resources, or game file corruption."
+    } else if message.contains("no valid OpenGL") || message.contains("OpenGL Error") {
+        "OpenGL error. Update your video card drivers or make sure your computer supports the required OpenGL version."
+    } else {
+        message
+    };
+
     let mut text_height = 30;
     let max_width = 190;
 
     let chars_per_line = max_width / 7;
-    let line_count = (message.len() as f32 / chars_per_line as f32).ceil() as i32;
+    let line_count = (display_message.len() as f32 / chars_per_line as f32).ceil() as i32;
     if line_count > 1 {
         text_height = line_count * 15;
     }
@@ -331,16 +350,35 @@ pub fn show_error_dialog(message: &str, text_font: Font) {
     icon_img.scale(48, 48, false, true);
     error_icon.set_image(Some(icon_img));
 
-    let mut text = Frame::new(90, 45, max_width, text_height, message);
+    let mut text = Frame::new(90, 45, max_width, text_height, display_message);
     text.set_align(Align::Left | Align::Inside | Align::Wrap);
     text.set_label_font(text_font);
     text.set_label_size(12);
 
-    let mut ok_btn = Button::new(110, window_height - 35, 100, 25, "OK");
+    let show_details = display_message != message;
+
+    let buttons_y = window_height - 35;
+    let mut ok_btn = Button::new(
+        if show_details { 60 } else { 110 },
+        buttons_y,
+        100,
+        25,
+        "OK",
+    );
     ok_btn.set_label_font(text_font);
     ok_btn.set_label_size(12);
     ok_btn.set_frame(FrameType::UpBox);
     ok_btn.set_color(Color::from_rgb(192, 192, 192));
+
+    let mut details_btn = Button::new(170, buttons_y, 100, 25, "Details");
+    if show_details {
+        details_btn.set_label_font(text_font);
+        details_btn.set_label_size(12);
+        details_btn.set_frame(FrameType::UpBox);
+        details_btn.set_color(Color::from_rgb(192, 192, 192));
+    } else {
+        details_btn.hide();
+    }
 
     setup_frame(dialog.width(), dialog.height());
     setup_title_bar(
@@ -356,6 +394,16 @@ pub fn show_error_dialog(message: &str, text_font: Font) {
     ok_btn.set_callback(move |_| {
         dialog_clone.hide();
     });
+
+    if show_details {
+        let original_message = message.to_string();
+        let mut text_clone = text.clone();
+        let mut dialog_clone = dialog.clone();
+        details_btn.set_callback(move |_| {
+            text_clone.set_label(&original_message);
+            dialog_clone.redraw();
+        });
+    }
 
     let mut dialog_clone = dialog.clone();
     dialog.set_callback(move |_| {
@@ -382,21 +430,17 @@ pub fn setup_frame(width: i32, height: i32) {
 
     let add_frame = |x, y, w, h, img: &PngImage, scale: bool| {
         let mut frame = Frame::new(x, y, w, h, "");
-        //let mut y = y;
+
         if scale {
-            //y += h / 2;
             let mut scaled = img.clone();
             scaled.scale(w, h, false, true);
             frame.set_image(Some(scaled));
         } else {
-            //y += h;
             frame.set_image(Some(img.clone()));
         }
         frame.set_frame(FrameType::NoBox);
         frame.set_pos(x, y);
     };
-    
-    // TODO: FIXME
 
     let offset = 8;
     let bottom_adjust = 5;
@@ -409,20 +453,53 @@ pub fn setup_frame(width: i32, height: i32) {
     let h_h = top.height();
     let b_h = bottom.height();
 
-    let v_h = height - bc_h - tc_h - offset + bottom_adjust; 
+    let v_h = height - bc_h - tc_h - offset + bottom_adjust;
 
     add_frame(0, offset, tc_w, tc_h, &lt_corner, false);
-    add_frame(width - rt_corner.width(), offset, rt_corner.width(), rt_corner.height(), &rt_corner, false);
-    add_frame(tc_w, offset, width - tc_w - rt_corner.width(), h_h, &top, true);
- 
-    add_frame(0, height - bc_h + bottom_adjust, bc_w, bc_h, &lb_corner, false);
-    add_frame(width - rb_corner.width(), height - bc_h + bottom_adjust, rb_corner.width(), bc_h, &rb_corner, false); 
-    add_frame(lb_corner.width(), height - b_h + bottom_adjust, width - lb_corner.width() - rb_corner.width(), b_h, &bottom, true); 
+    add_frame(
+        width - rt_corner.width(),
+        offset,
+        rt_corner.width(),
+        rt_corner.height(),
+        &rt_corner,
+        false,
+    );
+    add_frame(
+        tc_w,
+        offset,
+        width - tc_w - rt_corner.width(),
+        h_h,
+        &top,
+        true,
+    );
+
+    add_frame(
+        0,
+        height - bc_h + bottom_adjust,
+        bc_w,
+        bc_h,
+        &lb_corner,
+        false,
+    );
+    add_frame(
+        width - rb_corner.width(),
+        height - bc_h + bottom_adjust,
+        rb_corner.width(),
+        bc_h,
+        &rb_corner,
+        false,
+    );
+    add_frame(
+        lb_corner.width(),
+        height - b_h + bottom_adjust,
+        width - lb_corner.width() - rb_corner.width(),
+        b_h,
+        &bottom,
+        true,
+    );
 
     add_frame(0, tc_h + offset, v_w, v_h, &left, true);
     add_frame(width - v_w, tc_h + offset, v_w, v_h, &right, true);
-    ////////////////////////////////////////////////////////////////
-
 }
 
 pub fn setup_tiled_background() {
@@ -457,13 +534,15 @@ pub fn setup_main_controls(
     versions: String,
     profile_names: &Vec<String>,
 ) -> (
-    menu::Choice,
-    menu::Choice,
+    Choice,
+    Choice,
     Button,
     Button,
     Button,
     Frame,
-    menu::Choice,
+    Choice,
+    Frame,
+    Frame,
 ) {
     let button_width = 110;
     let button_height = 30;
@@ -489,7 +568,7 @@ pub fn setup_main_controls(
         })
         .collect();
 
-    let mut version_choice = menu::Choice::new(20, 60, WIN_WIDTH - 40, 25, "");
+    let mut version_choice = Choice::new(20, 60, WIN_WIDTH - 40, 25, "");
     version_choice.set_color(Color::White);
     version_choice.set_text_font(text_font);
     version_choice.set_text_size(12);
@@ -512,7 +591,7 @@ pub fn setup_main_controls(
         checkboxes.push(cb);
     }
 
-    let mut java_choice = menu::Choice::new(400, 95, 180, 20, "");
+    let mut java_choice = Choice::new(400, 95, 180, 20, "");
     java_choice.set_color(Color::White);
     java_choice.set_text_font(text_font);
     java_choice.set_text_size(12);
@@ -572,7 +651,7 @@ pub fn setup_main_controls(
     profile_label.set_frame(FrameType::NoBox);
     profile_label.set_align(Align::Left | Align::Inside);
 
-    let mut profile_choice = menu::Choice::new(20, 145, WIN_WIDTH - 40, 25, "");
+    let mut profile_choice = Choice::new(20, 145, WIN_WIDTH - 40, 25, "");
     profile_choice.set_color(Color::White);
     profile_choice.set_text_font(text_font);
     profile_choice.set_text_size(12);
@@ -599,10 +678,18 @@ pub fn setup_main_controls(
     let folder_button_height = 25;
     let play_x = 310;
     let play_y = buttons_y;
-    
-    let mut folder_button = Button::new(play_x - folder_button_width - 10, play_y, folder_button_width, folder_button_height, "");
 
-    folder_button.set_image(Some(load_image_from_data!("../themes/windows98/folder.png").unwrap()));
+    let mut folder_button = Button::new(
+        play_x - folder_button_width - 10,
+        play_y,
+        folder_button_width,
+        folder_button_height,
+        "",
+    );
+
+    folder_button.set_image(Some(
+        load_image_from_data!("../themes/windows98/folder.png").unwrap(),
+    ));
     folder_button.set_tooltip("Open launcher folder");
     folder_button.set_frame(FrameType::UpBox);
     folder_button.set_color(Color::from_rgb(192, 192, 192));
@@ -610,21 +697,21 @@ pub fn setup_main_controls(
     folder_button.set_callback(move |_| {
         use crate::get_game_directory;
         let game_dir = get_game_directory();
-        
+
         #[cfg(target_os = "windows")]
         {
             let _ = Command::new("explorer")
                 .arg(game_dir.to_string_lossy().to_string())
                 .spawn();
         }
-        
+
         #[cfg(target_os = "macos")]
         {
             let _ = Command::new("open")
                 .arg(game_dir.to_string_lossy().to_string())
                 .spawn();
         }
-        
+
         #[cfg(all(unix, not(target_os = "macos")))]
         {
             let _ = Command::new("xdg-open")
@@ -655,6 +742,30 @@ pub fn setup_main_controls(
     welcome_frame.set_label_color(Color::White);
     welcome_frame.set_frame(FrameType::NoBox);
     welcome_frame.set_align(Align::Left | Align::Inside);
+
+    let status_y = buttons_y + 35;
+
+    let mut progress_label = Frame::new(20, status_y - 10, 100, 20, "Progress:");
+    progress_label.set_label_font(text_font);
+    progress_label.set_label_size(12);
+    progress_label.set_label_color(Color::White);
+    progress_label.set_frame(FrameType::NoBox);
+    progress_label.set_align(Align::Left | Align::Inside);
+
+    let mut status_label = Frame::new(20, status_y, WIN_WIDTH - 40, 20, "");
+    status_label.set_label_font(text_font);
+    status_label.set_label_size(12);
+    status_label.set_label_color(Color::White);
+    status_label.set_frame(FrameType::NoBox);
+    status_label.set_align(Align::Left | Align::Inside);
+
+    let progress_bar_y = status_y + 20;
+
+    let mut progress_frame = Frame::new(20, progress_bar_y, WIN_WIDTH - 40, 20, "");
+    progress_frame.set_frame(FrameType::DownBox);
+    progress_frame.set_color(Color::White);
+
+    let progress_bar = create_win98_progress_bar(20, progress_bar_y, WIN_WIDTH - 40, 20);
 
     let mut update_dropdown = {
         let versions_data = versions_data.clone();
@@ -728,6 +839,8 @@ pub fn setup_main_controls(
         edit_profile,
         welcome_frame,
         java_choice,
+        status_label,
+        progress_bar,
     )
 }
 
@@ -813,4 +926,35 @@ pub fn handle_drag(win: &mut fltk::window::Window) {
         }
         _ => false,
     });
+}
+
+pub fn create_win98_progress_bar(x: i32, y: i32, w: i32, h: i32) -> Frame {
+    let mut progress_frame = Frame::new(x, y, w, h, "");
+    progress_frame.set_frame(FrameType::DownBox);
+    progress_frame.set_color(Color::White);
+
+    let mut progress_bar = Frame::new(x + 2, y + 2, 0, h - 4, "");
+    progress_bar.set_frame(FrameType::FlatBox);
+
+    progress_bar.draw(move |f| {
+        let fw = f.w();
+        let fh = f.h();
+        let fx = f.x();
+        let fy = f.y();
+
+        let win98_blue = Color::from_rgb(0, 0, 128);
+        let block_width = 8;
+        let block_spacing = 2;
+
+        let max_blocks = fw / (block_width + block_spacing);
+
+        for i in 0..max_blocks {
+            let bx = fx + i * (block_width + block_spacing);
+            if bx + block_width <= fx + fw {
+                fltk::draw::draw_rect_fill(bx, fy, block_width, fh, win98_blue);
+            }
+        }
+    });
+
+    progress_bar
 }

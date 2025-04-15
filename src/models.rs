@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use serde::Serialize;
+use std::cmp::min;
 use std::collections::HashMap;
 
 #[derive(Debug, Deserialize)]
@@ -21,6 +22,12 @@ pub struct JavaVersion {
     pub major_version: u32,
 }
 
+impl JavaVersion {
+    pub fn get_major_version(&self) -> u32 {
+        self.major_version
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct VersionData {
     pub downloads: Downloads,
@@ -32,6 +39,12 @@ pub struct VersionData {
     pub asset_index: AssetIndex,
     #[serde(default, rename = "javaVersion")]
     pub java_version: Option<JavaVersion>,
+}
+
+impl VersionData {
+    pub fn get_required_java_version(&self) -> Option<u32> {
+        self.java_version.as_ref().map(|jv| jv.get_major_version())
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -108,4 +121,73 @@ pub struct Profile {
     pub username: String,
     #[serde(default)]
     pub jvm_args: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum LaunchStage {
+    PreparingLibraries,
+    DownloadingLibraries,
+    ExtractingNatives,
+    PreparingAssets,
+    DownloadingAssets,
+    AssetLoadComplete,
+    ValidatingJava,
+    BuildingArguments,
+    StartingProcess,
+    ProcessStarted,
+    LaunchingGame,
+    Complete,
+}
+
+#[derive(Clone, Debug)]
+pub struct LaunchProgress {
+    pub stage: LaunchStage,
+    pub message: String,
+    pub current: usize,
+    pub total: usize,
+}
+
+impl LaunchProgress {
+    pub fn percentage(&self) -> f64 {
+        let current = min(self.current, self.total);
+
+        let base_percent = match self.stage {
+            LaunchStage::PreparingLibraries => 0.0,
+            LaunchStage::DownloadingLibraries => 10.0,
+            LaunchStage::ExtractingNatives => 20.0,
+            LaunchStage::PreparingAssets => 30.0,
+            LaunchStage::DownloadingAssets => 40.0,
+            LaunchStage::AssetLoadComplete => 50.0,
+            LaunchStage::ValidatingJava => 60.0,
+            LaunchStage::BuildingArguments => 70.0,
+            LaunchStage::StartingProcess => 80.0,
+            LaunchStage::ProcessStarted => 90.0,
+            LaunchStage::LaunchingGame => 95.0,
+            LaunchStage::Complete => 100.0,
+        };
+
+        let next_stage_percent = match self.stage {
+            LaunchStage::DownloadingLibraries => 20.0,
+            LaunchStage::DownloadingAssets => 50.0,
+
+            _ => match self.stage {
+                LaunchStage::PreparingLibraries => 10.0,
+                LaunchStage::ExtractingNatives => 30.0,
+                LaunchStage::PreparingAssets => 40.0,
+                LaunchStage::AssetLoadComplete => 60.0,
+                LaunchStage::ValidatingJava => 70.0,
+                LaunchStage::BuildingArguments => 80.0,
+                LaunchStage::StartingProcess => 90.0,
+                LaunchStage::ProcessStarted => 95.0,
+                LaunchStage::LaunchingGame => 100.0,
+                LaunchStage::Complete => 100.0,
+                _ => base_percent + 10.0,
+            },
+        };
+
+        let stage_range = next_stage_percent - base_percent;
+        let stage_progress = (current as f64 / self.total as f64) * stage_range;
+
+        (base_percent + stage_progress).min(100.0)
+    }
 }

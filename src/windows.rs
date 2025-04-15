@@ -26,8 +26,6 @@ pub fn adjust_window(win: &fltk::window::Window) {
     }
 }
 
-pub fn set_window_icon(win: &mut fltk::window::Window, icon_path: &str) {
-    if let Ok(icon) = PngImage::load(icon_path) {
-        win.set_icon(Some(icon));
-    }
+pub fn set_window_icon(win: &mut fltk::window::Window, icon: &PngImage) {
+        win.set_icon(Some(icon.clone()));
 }
