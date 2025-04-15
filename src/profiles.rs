@@ -1,7 +1,7 @@
-use std::path::Path;
+use crate::models::Profile;
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter};
-use crate::models::Profile;
+use std::path::Path;
 
 pub fn read_profiles(path: &Path) -> Result<Vec<Profile>, Box<dyn std::error::Error>> {
     if path.exists() {
@@ -18,9 +18,9 @@ pub fn write_profiles(path: &Path, profiles: &[Profile]) -> Result<(), Box<dyn s
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    
+
     let file = File::create(path)?;
     let writer = BufWriter::new(file);
     serde_json::to_writer_pretty(writer, profiles)?;
     Ok(())
-} 
+}

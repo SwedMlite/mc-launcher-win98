@@ -84,7 +84,7 @@ pub struct LibraryDownloads {
 #[derive(Debug, Deserialize)]
 pub struct Artifact {
     pub path: String,
-    pub url: String
+    pub url: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -103,7 +103,9 @@ pub struct Extract {
     pub exclude: Option<Vec<String>>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)] 
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Profile {
     pub username: String,
-} 
+    #[serde(default)]
+    pub jvm_args: Option<String>,
+}

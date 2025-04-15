@@ -1,5 +1,5 @@
+use crate::models::{VersionData, VersionManifest};
 use std::error::Error;
-use crate::models::{VersionManifest, VersionData};
 
 pub fn fetch_version_manifest(manifest_url: &str) -> Result<VersionManifest, Box<dyn Error>> {
     let response = reqwest::blocking::get(manifest_url)?;
@@ -17,11 +17,11 @@ pub fn get_version_ids() -> String {
     let mut versions = String::new();
     match fetch_version_manifest("https://launchermeta.mojang.com/mc/game/version_manifest.json") {
         Ok(manifest) => {
-            for version in &manifest.versions { 
+            for version in &manifest.versions {
                 versions.push_str(&format!("{}|{}|", version.id, version._type));
             }
         }
-        Err(e) => eprintln!("Failed to fetch versions: {}", e),
+        Err(_) => {}
     }
     versions
 }
@@ -36,9 +36,6 @@ pub fn get_version_link(version_id: String) -> Option<String> {
             }
             None
         }
-        Err(e) => {
-            eprintln!("Failed to fetch versions: {}", e);
-            None
-        }
+        Err(_) => None,
     }
-} 
+}

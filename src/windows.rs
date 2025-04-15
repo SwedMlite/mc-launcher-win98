@@ -1,5 +1,6 @@
-use winapi::shared::windef::HWND;
 use fltk::prelude::WindowExt;
+use fltk::image::PngImage;
+use winapi::shared::windef::HWND;
 use winapi::um::winuser::{
     GWL_EXSTYLE, GWL_STYLE, GetWindowLongPtrW, SetActiveWindow, SetWindowLongPtrW, WS_CAPTION,
     WS_EX_APPWINDOW, WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_POPUP, WS_SYSMENU, WS_THICKFRAME,
@@ -17,10 +18,16 @@ pub fn adjust_window(win: &fltk::window::Window) {
         SetWindowLongPtrW(hwnd, GWL_STYLE, new_style as isize);
 
         let old_ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
-        let toolwindow_mask = 0x80; 
+        let toolwindow_mask = 0x80;
         let new_ex = (old_ex & !toolwindow_mask) | WS_EX_APPWINDOW;
         SetWindowLongPtrW(hwnd, GWL_EXSTYLE, new_ex as isize);
 
         SetActiveWindow(hwnd);
+    }
+}
+
+pub fn set_window_icon(win: &mut fltk::window::Window, icon_path: &str) {
+    if let Ok(icon) = PngImage::load(icon_path) {
+        win.set_icon(Some(icon));
     }
 }
