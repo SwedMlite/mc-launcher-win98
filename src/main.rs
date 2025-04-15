@@ -7,8 +7,19 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 mod gui;
 use gui::*;
-mod get_versions;
-use get_versions::*;
+mod models;
+mod profiles;
+mod version_manager;
+mod downloader;
+mod java_finder;
+mod launcher;
+
+use profiles::{read_profiles, write_profiles};
+use version_manager::{get_version_ids, get_version_link, fetch_version_data};
+use downloader::download_file;
+use java_finder::find_all_java_installations;
+use launcher::launch_minecraft;
+
 #[cfg(target_os = "windows")]
 mod windows;
 #[cfg(target_os = "windows")]

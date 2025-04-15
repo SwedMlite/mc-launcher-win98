@@ -15,8 +15,8 @@ macro_rules! load_image_from_data {
         PngImage::from_data(include_bytes!($path))
     };
 }
-use crate::Profile;
-use crate::get_versions::find_all_java_installations;
+use crate::models::Profile;
+use crate::java_finder::find_all_java_installations;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -195,30 +195,27 @@ pub fn show_error_dialog(message: &str, text_font: Font) {
     bg.set_frame(FrameType::FlatBox);
     bg.set_color(Color::from_rgb(192, 192, 192));
 
-    let mut title_frame = Frame::new(0, 0, 300, 24, "Error");
-    title_frame.set_frame(FrameType::FlatBox);
-    title_frame.set_color(Color::from_rgb(128, 0, 0));
-    title_frame.set_label_color(Color::White);
-    title_frame.set_label_font(text_font);
-
-    let mut error_icon = Frame::new(20, 50, 32, 32, "!");
+    let mut error_icon = Frame::new(30, 45, 48, 48, "");
     error_icon.set_label_font(text_font);
     error_icon.set_label_size(24);
     error_icon.set_label_color(Color::from_rgb(255, 0, 0));
+    let mut icon_img = load_image_from_data!("windows98/error_icon.png").unwrap();
+    icon_img.scale(48, 48, false, true);
+    error_icon.set_image(Some(icon_img));
     
-    let mut text = Frame::new(70, 50, 210, 80, message);
-    text.set_align(Align::Left | Align::Top | Align::Inside | Align::Wrap);
+    let mut text = Frame::new(90, 45, 190, 30, message);
+    text.set_align(Align::Left | Align::Inside);
     text.set_label_font(text_font);
+    text.set_label_size(12);
 
     let mut ok_btn = Button::new(110, 90, 100, 25, "OK");
     ok_btn.set_label_font(text_font);
+    ok_btn.set_label_size(12);
     ok_btn.set_frame(FrameType::UpBox);
     ok_btn.set_color(Color::from_rgb(192, 192, 192));
     
-    let mut close_btn = Button::new(280, 4, 16, 16, "X");
-    close_btn.set_label_font(text_font);
-    close_btn.set_color(Color::from_rgb(192, 192, 192));
-    close_btn.set_frame(FrameType::UpBox);
+    setup_frame(dialog.width(), dialog.height());
+    setup_title_bar("Error", &mut load_image_from_data!("windows98/error_icon.png").unwrap(), text_font, &dialog);
     
     dialog.end();
     
@@ -228,30 +225,16 @@ pub fn show_error_dialog(message: &str, text_font: Font) {
     });
     
     let mut dialog_clone = dialog.clone();
-    close_btn.set_callback(move |_| {
-        dialog_clone.hide();
-    });
-    
-    let mut dialog_clone = dialog.clone();
     dialog.set_callback(move |_| {
         dialog_clone.hide();
     });
+
+    handle_drag(&mut dialog);
 
     dialog.show();
 
     #[cfg(target_os = "windows")]
     adjust_window(&dialog);
-    
-    let start_time = std::time::Instant::now();
-    let timeout = std::time::Duration::from_secs(5);
-    
-    while dialog.shown() && start_time.elapsed() < timeout {
-        let _ = app::wait_for(0.05);
-    }
-    
-    if dialog.shown() {
-        dialog.hide();
-    }
 }
 
 pub fn setup_frame(width: i32, height: i32) {
@@ -377,14 +360,7 @@ pub fn setup_main_controls(text_font: Font, versions: String, profile_names: &Ve
         checkboxes.push(cb);
     }
     
-    let mut java_label = Frame::new(400, 95, 60, 20, "Java:");
-    java_label.set_label_font(text_font);
-    java_label.set_label_size(12);
-    java_label.set_label_color(Color::White);
-    java_label.set_frame(FrameType::NoBox);
-    java_label.set_align(Align::Left | Align::Inside);
-    
-    let mut java_choice = menu::Choice::new(460, 95, 120, 20, "");
+    let mut java_choice = menu::Choice::new(400, 95, 180, 20, "");
     java_choice.set_color(Color::White);
     java_choice.set_text_font(text_font);
     java_choice.set_text_size(12);
@@ -428,19 +404,6 @@ pub fn setup_main_controls(text_font: Font, versions: String, profile_names: &Ve
             short_display_names.push(short_name);
         }
         java_choice.set_value(0);
-        
-        let short_names = short_display_names.clone();
-        java_choice.set_callback(move |c| {
-            let idx = c.value() as usize;
-            if idx < short_names.len() {
-                c.set_label(&short_names[idx]);
-            }
-        });
-        
-        // Ensure initial label is set
-        if !short_display_names.is_empty() {
-            java_choice.set_label(&short_display_names[0]);
-        }
     } else {
         java_choice.add_choice("No Java installations found");
         java_choice.set_value(0);
@@ -485,7 +448,6 @@ pub fn setup_main_controls(text_font: Font, versions: String, profile_names: &Ve
         "Edit Profile",
     );
     edit_profile.set_label_font(text_font);
-    edit_profile.set_label_size(12);
     edit_profile.deactivate();
     
     let play_x = 310;

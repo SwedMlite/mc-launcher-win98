@@ -6,7 +6,6 @@ use winapi::um::winuser::{
     WS_VISIBLE,
 };
 
-// Takes a reference to avoid cloning the window which causes null ptr issues
 pub fn adjust_window(win: &fltk::window::Window) {
     let hwnd = win.raw_handle() as HWND;
     unsafe {
