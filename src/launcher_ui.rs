@@ -236,8 +236,8 @@ fn setup_progress_monitoring(
             match receiver.try_recv() {
                 Ok(progress) => {
                     let percentage = progress.percentage();
-                    let width = (percentage / 100.0 * (progress_bar_clone.w() as f64)) as i32;
-                    progress_bar_clone.set_size(width, progress_bar_clone.h());
+                    
+                    update_win98_progress_bar(&mut progress_bar_clone, percentage);
                     
                     let status_text = progress.message.clone();
                     

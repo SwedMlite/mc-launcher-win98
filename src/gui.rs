@@ -958,3 +958,10 @@ pub fn create_win98_progress_bar(x: i32, y: i32, w: i32, h: i32) -> Frame {
 
     progress_bar
 }
+
+pub fn update_win98_progress_bar(progress_bar: &mut Frame, percentage: f64) {
+    let total_width = progress_bar.parent().unwrap().w() - 4; // Учитываем отступы
+    let width = (percentage / 100.0 * (total_width as f64)) as i32;
+    progress_bar.set_size(width, progress_bar.h());
+    progress_bar.redraw();
+}
