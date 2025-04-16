@@ -1,6 +1,7 @@
 use fltk::{
     app,
     button::{Button, CheckButton},
+    draw,
     enums::{Align, Color, Event, Font, FrameType},
     frame::Frame,
     image::PngImage,
@@ -19,17 +20,88 @@ macro_rules! load_image_from_data {
 use crate::java_finder::find_all_java_installations;
 use crate::models::Profile;
 use std::process::Command;
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
+};
 
 #[cfg(target_os = "windows")]
 use crate::windows::adjust_window;
 
 pub const WIN_WIDTH: i32 = 600;
-pub const WIN_HEIGHT: i32 = 275;
+pub const WIN_HEIGHT: i32 = 300;
+
+const CENTER_DIVISOR: i32 = 2;
+const FONT_SIZE: i32 = 12;
+const SMALL_FONT_SIZE: i32 = 10;
+const PADDING: i32 = 15;
+const LEFT_MARGIN: i32 = 20;
+const BUTTON_X: i32 = 100;
+
+const DIALOG_WIDTH: i32 = 300;
+const DIALOG_HEIGHT: i32 = 200;
+
+const LABEL_HEIGHT: i32 = 20;
+const CONTROL_HEIGHT: i32 = 25;
+const BUTTON_HEIGHT: i32 = 30;
+const BUTTON_WIDTH: i32 = 110;
+const BUTTON_SPACING: i32 = 10;
+const INPUT_WIDTH: i32 = 260;
+const LABEL_WIDTH: i32 = 100;
+const FOLDER_BUTTON_WIDTH: i32 = 30;
+const JAVA_FIELD_WIDTH: i32 = 60;
+const JVM_ARGS_WIDTH: i32 = 160;
+const JVM_HINT_WIDTH: i32 = 135;
+const VERSION_LABEL_WIDTH: i32 = 100;
+const PROGRESS_LABEL_WIDTH: i32 = 100;
+const JAVA_LABEL_WIDTH: i32 = 50;
+const CHECKBOX_WIDTH: i32 = 75;
+const CHECKBOX_HEIGHT: i32 = 20;
+
+const FRAME_OFFSET: i32 = 8;
+const PADDING_MULTIPLIER: i32 = 3;
+
+const TOP_MARGIN: i32 = 40;
+const USERNAME_Y: i32 = TOP_MARGIN;
+const INPUT_Y: i32 = 65;
+const VERSION_Y: i32 = 60;
+const JVM_ARGS_Y: i32 = 95;
+const CHECKBOX_Y: i32 = 95;
+const JVM_HINT_X: i32 = 165;
+const JVM_INPUT_Y: i32 = 120;
+const JAVA_LABEL_Y: i32 = 130;
+const BUTTON_Y: i32 = 160;
+const BOTTOM_SECTION_Y: i32 = 165;
+const BUTTONS_Y_OFFSET: i32 = 25;
+const BUTTONS_MARGIN: i32 = 35;
+const WELCOME_FRAME_HEIGHT: i32 = 20;
+
+const GRAY_COLOR: Color = Color::from_rgb(192, 192, 192);
+const HINT_TEXT_COLOR: Color = Color::from_rgb(80, 80, 80);
+const ERROR_ICON_COLOR: Color = Color::from_rgb(255, 0, 0);
+
+const ERROR_TEXT_MAX_WIDTH: i32 = 190;
+const CHARS_PER_LINE_DIVISOR: i32 = 7;
+const DEFAULT_TEXT_HEIGHT: i32 = 30;
+const LINE_HEIGHT: i32 = 15;
+const ERROR_BASE_HEIGHT: i32 = 125;
+const ERROR_ICON_X: i32 = 30;
+const ERROR_ICON_Y: i32 = 45;
+const ERROR_ICON_SIZE: i32 = 48;
+const ERROR_ICON_FONT_SIZE: i32 = FONT_SIZE * 2;
+const ERROR_TEXT_X: i32 = 90;
+const OK_BUTTON_X_WITH_DETAILS: i32 = 60;
+const OK_BUTTON_X_SOLO: i32 = 110;
+const DETAILS_BUTTON_X: i32 = 170;
+
+const PROGRESS_MARGIN: i32 = 15;
+const PROGRESS_BORDER: i32 = 2;
+const PROGRESS_HEIGHT: i32 = 16;
+
+const BACKGROUND_TILE_SIZE: i32 = 64;
 
 static DIALOG_RUNNING: AtomicBool = AtomicBool::new(false);
+static mut MAX_PROGRESS_WIDTH: i32 = 100;
 
 pub fn create_new_profile_dialog(text_font: Font) -> Option<Profile> {
     if DIALOG_RUNNING.swap(true, Ordering::SeqCst) {
@@ -37,47 +109,68 @@ pub fn create_new_profile_dialog(text_font: Font) -> Option<Profile> {
     }
 
     let mut win = Window::default()
-        .with_size(300, 200)
+        .with_size(DIALOG_WIDTH, DIALOG_HEIGHT)
         .with_label("New Profile");
     win.set_border(false);
 
     let screen_width = app::screen_size().0 as i32;
     let screen_height = app::screen_size().1 as i32;
-    win.set_pos((screen_width - 300) / 2, (screen_height - 200) / 2);
+    win.set_pos(
+        (screen_width - DIALOG_WIDTH) / CENTER_DIVISOR,
+        (screen_height - DIALOG_HEIGHT) / CENTER_DIVISOR,
+    );
 
-    let mut bg = Frame::new(0, 0, 300, 200, "");
+    let mut bg = Frame::new(0, 0, DIALOG_WIDTH, DIALOG_HEIGHT, "");
     bg.set_frame(FrameType::FlatBox);
-    bg.set_color(Color::from_rgb(192, 192, 192));
+    bg.set_color(GRAY_COLOR);
 
-    let mut username_label = Frame::new(20, 40, 100, 25, "Username:");
+    let mut username_label = Frame::new(
+        LEFT_MARGIN,
+        USERNAME_Y,
+        LABEL_WIDTH,
+        CONTROL_HEIGHT,
+        "Username:",
+    );
     username_label.set_label_font(text_font);
-    username_label.set_label_size(12);
+    username_label.set_label_size(FONT_SIZE);
     username_label.set_align(Align::Left | Align::Inside);
 
-    let mut username_input = Input::new(20, 65, 260, 25, "");
+    let mut username_input = Input::new(LEFT_MARGIN, INPUT_Y, INPUT_WIDTH, CONTROL_HEIGHT, "");
     username_input.set_text_font(text_font);
-    username_input.set_text_size(12);
+    username_input.set_text_size(FONT_SIZE);
 
-    let mut jvm_args_label = Frame::new(20, 95, 160, 25, "JVM Arguments (optional):");
+    let mut jvm_args_label = Frame::new(
+        LEFT_MARGIN,
+        JVM_ARGS_Y,
+        JVM_ARGS_WIDTH,
+        CONTROL_HEIGHT,
+        "JVM Arguments (optional):",
+    );
     jvm_args_label.set_label_font(text_font);
-    jvm_args_label.set_label_size(12);
+    jvm_args_label.set_label_size(FONT_SIZE);
     jvm_args_label.set_align(Align::Left | Align::Inside);
 
-    let mut jvm_hint_label = Frame::new(165, 95, 135, 25, "Example: -Xmx2G -Xms512M");
+    let mut jvm_hint_label = Frame::new(
+        JVM_HINT_X,
+        JVM_ARGS_Y,
+        JVM_HINT_WIDTH,
+        CONTROL_HEIGHT,
+        "Example: -Xmx2G -Xms512M",
+    );
     jvm_hint_label.set_label_font(text_font);
-    jvm_hint_label.set_label_size(10);
-    jvm_hint_label.set_label_color(Color::from_rgb(80, 80, 80));
+    jvm_hint_label.set_label_size(SMALL_FONT_SIZE);
+    jvm_hint_label.set_label_color(HINT_TEXT_COLOR);
     jvm_hint_label.set_align(Align::Left | Align::Inside);
 
-    let mut jvm_args_input = Input::new(20, 120, 260, 25, "");
+    let mut jvm_args_input = Input::new(LEFT_MARGIN, JVM_INPUT_Y, INPUT_WIDTH, CONTROL_HEIGHT, "");
     jvm_args_input.set_text_font(text_font);
-    jvm_args_input.set_text_size(12);
+    jvm_args_input.set_text_size(FONT_SIZE);
 
-    let mut create_button = Button::new(100, 160, 100, 25, "Create");
+    let mut create_button = Button::new(BUTTON_X, BUTTON_Y, BUTTON_X, CONTROL_HEIGHT, "Create");
     create_button.set_label_font(text_font);
-    create_button.set_label_size(12);
+    create_button.set_label_size(FONT_SIZE);
     create_button.set_frame(FrameType::UpBox);
-    create_button.set_color(Color::from_rgb(192, 192, 192));
+    create_button.set_color(GRAY_COLOR);
 
     setup_frame(win.width(), win.height());
     setup_title_bar(
@@ -128,7 +221,6 @@ pub fn create_new_profile_dialog(text_font: Font) -> Option<Profile> {
     }
 
     DIALOG_RUNNING.store(false, Ordering::SeqCst);
-
     result.lock().unwrap().clone()
 }
 
@@ -138,51 +230,72 @@ pub fn edit_profile_dialog(text_font: Font, profile: &Profile) -> Option<Profile
     }
 
     let mut win = Window::default()
-        .with_size(300, 200)
+        .with_size(DIALOG_WIDTH, DIALOG_HEIGHT)
         .with_label("Edit Profile");
     win.set_border(false);
 
     let screen_width = app::screen_size().0 as i32;
     let screen_height = app::screen_size().1 as i32;
-    win.set_pos((screen_width - 300) / 2, (screen_height - 200) / 2);
+    win.set_pos(
+        (screen_width - DIALOG_WIDTH) / CENTER_DIVISOR,
+        (screen_height - DIALOG_HEIGHT) / CENTER_DIVISOR,
+    );
 
-    let mut bg = Frame::new(0, 0, 300, 200, "");
+    let mut bg = Frame::new(0, 0, DIALOG_WIDTH, DIALOG_HEIGHT, "");
     bg.set_frame(FrameType::FlatBox);
-    bg.set_color(Color::from_rgb(192, 192, 192));
+    bg.set_color(GRAY_COLOR);
 
-    let mut username_label = Frame::new(20, 40, 100, 25, "Username:");
+    let mut username_label = Frame::new(
+        LEFT_MARGIN,
+        USERNAME_Y,
+        LABEL_WIDTH,
+        CONTROL_HEIGHT,
+        "Username:",
+    );
     username_label.set_label_font(text_font);
-    username_label.set_label_size(12);
+    username_label.set_label_size(FONT_SIZE);
     username_label.set_align(Align::Left | Align::Inside);
 
-    let mut username_input = Input::new(20, 65, 260, 25, "");
+    let mut username_input = Input::new(LEFT_MARGIN, INPUT_Y, INPUT_WIDTH, CONTROL_HEIGHT, "");
     username_input.set_text_font(text_font);
-    username_input.set_text_size(12);
+    username_input.set_text_size(FONT_SIZE);
     username_input.set_value(&profile.username);
 
-    let mut jvm_args_label = Frame::new(20, 95, 160, 25, "JVM Arguments (optional):");
+    let mut jvm_args_label = Frame::new(
+        LEFT_MARGIN,
+        JVM_ARGS_Y,
+        JVM_ARGS_WIDTH,
+        CONTROL_HEIGHT,
+        "JVM Arguments (optional):",
+    );
     jvm_args_label.set_label_font(text_font);
-    jvm_args_label.set_label_size(12);
+    jvm_args_label.set_label_size(FONT_SIZE);
     jvm_args_label.set_align(Align::Left | Align::Inside);
 
-    let mut jvm_hint_label = Frame::new(165, 95, 135, 25, "Example: -Xmx2G -Xms512M");
+    let mut jvm_hint_label = Frame::new(
+        JVM_HINT_X,
+        JVM_ARGS_Y,
+        JVM_HINT_WIDTH,
+        CONTROL_HEIGHT,
+        "Example: -Xmx2G -Xms512M",
+    );
     jvm_hint_label.set_label_font(text_font);
-    jvm_hint_label.set_label_size(10);
-    jvm_hint_label.set_label_color(Color::from_rgb(80, 80, 80));
+    jvm_hint_label.set_label_size(SMALL_FONT_SIZE);
+    jvm_hint_label.set_label_color(HINT_TEXT_COLOR);
     jvm_hint_label.set_align(Align::Left | Align::Inside);
 
-    let mut jvm_args_input = Input::new(20, 120, 260, 25, "");
+    let mut jvm_args_input = Input::new(LEFT_MARGIN, JVM_INPUT_Y, INPUT_WIDTH, CONTROL_HEIGHT, "");
     jvm_args_input.set_text_font(text_font);
-    jvm_args_input.set_text_size(12);
+    jvm_args_input.set_text_size(FONT_SIZE);
     if let Some(args) = &profile.jvm_args {
         jvm_args_input.set_value(args);
     }
 
-    let mut save_button = Button::new(100, 160, 100, 25, "Save");
+    let mut save_button = Button::new(BUTTON_X, BUTTON_Y, BUTTON_X, CONTROL_HEIGHT, "Save");
     save_button.set_label_font(text_font);
-    save_button.set_label_size(12);
+    save_button.set_label_size(FONT_SIZE);
     save_button.set_frame(FrameType::UpBox);
-    save_button.set_color(Color::from_rgb(192, 192, 192));
+    save_button.set_color(GRAY_COLOR);
 
     setup_frame(win.width(), win.height());
     setup_title_bar(
@@ -233,7 +346,6 @@ pub fn edit_profile_dialog(text_font: Font, profile: &Profile) -> Option<Profile
     }
 
     DIALOG_RUNNING.store(false, Ordering::SeqCst);
-
     result.lock().unwrap().clone()
 }
 
@@ -314,19 +426,19 @@ pub fn show_error_dialog(message: &str, text_font: Font) {
         message
     };
 
-    let mut text_height = 30;
-    let max_width = 190;
+    let error_width = DIALOG_WIDTH;
+    let chars_per_line = ERROR_TEXT_MAX_WIDTH / CHARS_PER_LINE_DIVISOR;
 
-    let chars_per_line = max_width / 7;
+    let mut text_height = DEFAULT_TEXT_HEIGHT;
     let line_count = (display_message.len() as f32 / chars_per_line as f32).ceil() as i32;
     if line_count > 1 {
-        text_height = line_count * 15;
+        text_height = line_count * LINE_HEIGHT;
     }
 
-    let window_height = 125 + (text_height - 30).max(0);
+    let window_height = ERROR_BASE_HEIGHT + (text_height - DEFAULT_TEXT_HEIGHT).max(0);
 
     let mut dialog = Window::default()
-        .with_size(300, window_height)
+        .with_size(error_width, window_height)
         .with_label("Error");
     dialog.set_border(false);
     dialog.make_modal(true);
@@ -334,48 +446,71 @@ pub fn show_error_dialog(message: &str, text_font: Font) {
     let screen_width = app::screen_size().0 as i32;
     let screen_height = app::screen_size().1 as i32;
     dialog.set_pos(
-        (screen_width - 300) / 2,
-        (screen_height - window_height) / 2,
+        (screen_width - error_width) / CENTER_DIVISOR,
+        (screen_height - window_height) / CENTER_DIVISOR,
     );
 
-    let mut bg = Frame::new(0, 0, 300, window_height, "");
+    let mut bg = Frame::new(0, 0, error_width, window_height, "");
     bg.set_frame(FrameType::FlatBox);
-    bg.set_color(Color::from_rgb(192, 192, 192));
+    bg.set_color(GRAY_COLOR);
 
-    let mut error_icon = Frame::new(30, 45, 48, 48, "");
+    let mut error_icon = Frame::new(
+        ERROR_ICON_X,
+        ERROR_ICON_Y,
+        ERROR_ICON_SIZE,
+        ERROR_ICON_SIZE,
+        "",
+    );
     error_icon.set_label_font(text_font);
-    error_icon.set_label_size(24);
-    error_icon.set_label_color(Color::from_rgb(255, 0, 0));
+    error_icon.set_label_size(ERROR_ICON_FONT_SIZE);
+    error_icon.set_label_color(ERROR_ICON_COLOR);
     let mut icon_img = load_image_from_data!("../themes/windows98/error_icon.png").unwrap();
-    icon_img.scale(48, 48, false, true);
+    icon_img.scale(ERROR_ICON_SIZE, ERROR_ICON_SIZE, false, true);
     error_icon.set_image(Some(icon_img));
 
-    let mut text = Frame::new(90, 45, max_width, text_height, display_message);
+    let mut text = Frame::new(
+        ERROR_TEXT_X,
+        ERROR_ICON_Y,
+        ERROR_TEXT_MAX_WIDTH,
+        text_height,
+        display_message,
+    );
     text.set_align(Align::Left | Align::Inside | Align::Wrap);
     text.set_label_font(text_font);
-    text.set_label_size(12);
+    text.set_label_size(FONT_SIZE);
 
     let show_details = display_message != message;
+    let buttons_y = window_height - BUTTONS_MARGIN;
+    let button_width = BUTTON_X;
 
-    let buttons_y = window_height - 35;
     let mut ok_btn = Button::new(
-        if show_details { 60 } else { 110 },
+        if show_details {
+            OK_BUTTON_X_WITH_DETAILS
+        } else {
+            OK_BUTTON_X_SOLO
+        },
         buttons_y,
-        100,
-        25,
+        button_width,
+        CONTROL_HEIGHT,
         "OK",
     );
     ok_btn.set_label_font(text_font);
-    ok_btn.set_label_size(12);
+    ok_btn.set_label_size(FONT_SIZE);
     ok_btn.set_frame(FrameType::UpBox);
-    ok_btn.set_color(Color::from_rgb(192, 192, 192));
+    ok_btn.set_color(GRAY_COLOR);
 
-    let mut details_btn = Button::new(170, buttons_y, 100, 25, "Details");
+    let mut details_btn = Button::new(
+        DETAILS_BUTTON_X,
+        buttons_y,
+        button_width,
+        CONTROL_HEIGHT,
+        "Details",
+    );
     if show_details {
         details_btn.set_label_font(text_font);
-        details_btn.set_label_size(12);
+        details_btn.set_label_size(FONT_SIZE);
         details_btn.set_frame(FrameType::UpBox);
-        details_btn.set_color(Color::from_rgb(192, 192, 192));
+        details_btn.set_color(GRAY_COLOR);
     } else {
         details_btn.hide();
     }
@@ -411,7 +546,6 @@ pub fn show_error_dialog(message: &str, text_font: Font) {
     });
 
     handle_drag(&mut dialog);
-
     dialog.show();
 
     #[cfg(target_os = "windows")]
@@ -419,96 +553,101 @@ pub fn show_error_dialog(message: &str, text_font: Font) {
 }
 
 pub fn setup_frame(width: i32, height: i32) {
-    let top = load_image_from_data!("../themes/windows98/top_frame.png").unwrap();
-    let bottom = load_image_from_data!("../themes/windows98/bottom_frame.png").unwrap();
-    let left = load_image_from_data!("../themes/windows98/left_frame.png").unwrap();
-    let right = load_image_from_data!("../themes/windows98/right_frame.png").unwrap();
-    let lt_corner = load_image_from_data!("../themes/windows98/left_top_corner.png").unwrap();
-    let rt_corner = load_image_from_data!("../themes/windows98/right_top_corner.png").unwrap();
-    let lb_corner = load_image_from_data!("../themes/windows98/left_bottom_corner.png").unwrap();
-    let rb_corner = load_image_from_data!("../themes/windows98/right_bottom_corner.png").unwrap();
+    let top_img = load_image_from_data!("../themes/windows98/top_frame.png").unwrap();
+    let bottom_img = load_image_from_data!("../themes/windows98/bottom_frame.png").unwrap();
+    let left_img = load_image_from_data!("../themes/windows98/left_frame.png").unwrap();
+    let right_img = load_image_from_data!("../themes/windows98/right_frame.png").unwrap();
+    let lt_corner_img = load_image_from_data!("../themes/windows98/left_top_corner.png").unwrap();
+    let rt_corner_img = load_image_from_data!("../themes/windows98/right_top_corner.png").unwrap();
+    let lb_corner_img =
+        load_image_from_data!("../themes/windows98/left_bottom_corner.png").unwrap();
+    let rb_corner_img =
+        load_image_from_data!("../themes/windows98/right_bottom_corner.png").unwrap();
 
-    let add_frame = |x, y, w, h, img: &PngImage, scale: bool| {
-        let mut frame = Frame::new(x, y, w, h, "");
+    let mut frame = Frame::new(0, 0, width, height, "");
+    frame.set_frame(FrameType::NoBox);
 
-        if scale {
-            let mut scaled = img.clone();
-            scaled.scale(w, h, false, true);
-            frame.set_image(Some(scaled));
-        } else {
-            frame.set_image(Some(img.clone()));
+    let lt_w = lt_corner_img.width();
+    let lt_h = lt_corner_img.height();
+    let rt_w = rt_corner_img.width();
+    let rt_h = rt_corner_img.height();
+    let lb_w = lb_corner_img.width();
+    let lb_h = lb_corner_img.height();
+    let rb_w = rb_corner_img.width();
+    let rb_h = rb_corner_img.height();
+    let top_h = top_img.height();
+    let bottom_h = bottom_img.height();
+    let left_w = left_img.width();
+    let right_w = right_img.width();
+
+    let mut top_img = top_img;
+    let mut bottom_img = bottom_img;
+    let mut left_img = left_img;
+    let mut right_img = right_img;
+    let mut lt_corner_img = lt_corner_img;
+    let mut rt_corner_img = rt_corner_img;
+    let mut lb_corner_img = lb_corner_img;
+    let mut rb_corner_img = rb_corner_img;
+
+    frame.draw(move |f| {
+        let fw = f.w();
+        let fh = f.h();
+        let fx = f.x();
+        let fy = f.y();
+
+        lt_corner_img.draw(fx, fy, lt_w, lt_h);
+        rt_corner_img.draw(fx + fw - rt_w, fy, rt_w, rt_h);
+
+        lb_corner_img.draw(fx, fy + fh - lb_h, lb_w, lb_h);
+        rb_corner_img.draw(fx + fw - rb_w, fy + fh - rb_h, rb_w, rb_h);
+
+        let top_width = fw - lt_w - rt_w;
+        let top_tile_w = top_img.width();
+        let mut x_pos = fx + lt_w;
+        while x_pos < fx + lt_w + top_width {
+            let draw_width = (fx + lt_w + top_width - x_pos).min(top_tile_w);
+            top_img.draw(x_pos, fy, draw_width, top_h);
+            x_pos += draw_width;
         }
-        frame.set_frame(FrameType::NoBox);
-        frame.set_pos(x, y);
-    };
 
-    let offset = 8;
-    let bottom_adjust = 5;
+        let bottom_width = fw - lb_w - rb_w;
+        let bottom_tile_w = bottom_img.width();
+        let mut x_pos = fx + lb_w;
+        while x_pos < fx + lb_w + bottom_width {
+            let draw_width = (fx + lb_w + bottom_width - x_pos).min(bottom_tile_w);
+            bottom_img.draw(x_pos, fy + fh - bottom_h, draw_width, bottom_h);
+            x_pos += draw_width;
+        }
 
-    let tc_w = lt_corner.width();
-    let tc_h = lt_corner.height();
-    let bc_w = lb_corner.width();
-    let bc_h = lb_corner.height();
-    let v_w = left.width();
-    let h_h = top.height();
-    let b_h = bottom.height();
+        let left_height = fh - lt_h - lb_h;
+        let left_tile_h = left_img.height();
+        let mut y_pos = fy + lt_h;
+        while y_pos < fy + lt_h + left_height {
+            let draw_height = (fy + lt_h + left_height - y_pos).min(left_tile_h);
+            left_img.draw(fx, y_pos, left_w, draw_height);
+            y_pos += draw_height;
+        }
 
-    let v_h = height - bc_h - tc_h - offset + bottom_adjust;
+        let right_height = fh - rt_h - rb_h;
+        let right_tile_h = right_img.height();
+        let mut y_pos = fy + rt_h;
+        while y_pos < fy + rt_h + right_height {
+            let draw_height = (fy + rt_h + right_height - y_pos).min(right_tile_h);
+            right_img.draw(fx + fw - right_w, y_pos, right_w, draw_height);
+            y_pos += draw_height;
+        }
+    });
 
-    add_frame(0, offset, tc_w, tc_h, &lt_corner, false);
-    add_frame(
-        width - rt_corner.width(),
-        offset,
-        rt_corner.width(),
-        rt_corner.height(),
-        &rt_corner,
-        false,
-    );
-    add_frame(
-        tc_w,
-        offset,
-        width - tc_w - rt_corner.width(),
-        h_h,
-        &top,
-        true,
-    );
-
-    add_frame(
-        0,
-        height - bc_h + bottom_adjust,
-        bc_w,
-        bc_h,
-        &lb_corner,
-        false,
-    );
-    add_frame(
-        width - rb_corner.width(),
-        height - bc_h + bottom_adjust,
-        rb_corner.width(),
-        bc_h,
-        &rb_corner,
-        false,
-    );
-    add_frame(
-        lb_corner.width(),
-        height - b_h + bottom_adjust,
-        width - lb_corner.width() - rb_corner.width(),
-        b_h,
-        &bottom,
-        true,
-    );
-
-    add_frame(0, tc_h + offset, v_w, v_h, &left, true);
-    add_frame(width - v_w, tc_h + offset, v_w, v_h, &right, true);
+    frame.redraw();
 }
 
 pub fn setup_tiled_background() {
     let mut bg_tile = load_image_from_data!("../themes/background.png").unwrap();
-    bg_tile.scale(64, 64, false, true);
+    bg_tile.scale(BACKGROUND_TILE_SIZE, BACKGROUND_TILE_SIZE, false, true);
     let tile_w = bg_tile.width();
     let tile_h = bg_tile.height();
 
-    let mut tiled_frame = Frame::new(0, 8, WIN_WIDTH, WIN_HEIGHT, "");
+    let mut tiled_frame = Frame::new(0, FRAME_OFFSET, WIN_WIDTH, WIN_HEIGHT, "");
     tiled_frame.set_frame(FrameType::NoBox);
 
     tiled_frame.draw(move |f| {
@@ -544,34 +683,52 @@ pub fn setup_main_controls(
     Frame,
     Frame,
 ) {
-    let button_width = 110;
-    let button_height = 30;
+    let column_width = (WIN_WIDTH - (PADDING * PADDING_MULTIPLIER)) / 2;
+    let left_x = PADDING;
+    let right_x = left_x + column_width + PADDING;
 
-    let mut ver_label = Frame::new(20, 40, 100, 20, "Version:");
+    let mut ver_label = Frame::new(
+        left_x,
+        TOP_MARGIN,
+        VERSION_LABEL_WIDTH,
+        LABEL_HEIGHT,
+        "Version:",
+    );
     ver_label.set_label_font(text_font);
-    ver_label.set_label_size(12);
+    ver_label.set_label_size(FONT_SIZE);
     ver_label.set_label_color(Color::White);
     ver_label.set_frame(FrameType::NoBox);
     ver_label.set_align(Align::Left | Align::Inside);
 
-    let versions_data: Vec<(String, String)> = versions
-        .split('|')
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<&str>>()
-        .chunks(2)
-        .filter_map(|chunk| {
-            if chunk.len() == 2 {
-                Some((chunk[0].to_string(), chunk[1].to_string()))
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    let mut version_choice = Choice::new(20, 60, WIN_WIDTH - 40, 25, "");
+    let mut version_choice = Choice::new(left_x, VERSION_Y, column_width, CONTROL_HEIGHT, "");
     version_choice.set_color(Color::White);
     version_choice.set_text_font(text_font);
-    version_choice.set_text_size(12);
+    version_choice.set_text_size(FONT_SIZE);
+
+    let mut profile_label = Frame::new(
+        right_x,
+        TOP_MARGIN,
+        VERSION_LABEL_WIDTH,
+        LABEL_HEIGHT,
+        "Profile:",
+    );
+    profile_label.set_label_font(text_font);
+    profile_label.set_label_size(FONT_SIZE);
+    profile_label.set_label_color(Color::White);
+    profile_label.set_frame(FrameType::NoBox);
+    profile_label.set_align(Align::Left | Align::Inside);
+
+    let mut profile_choice = Choice::new(right_x, VERSION_Y, column_width, CONTROL_HEIGHT, "");
+    profile_choice.set_color(Color::White);
+    profile_choice.set_text_font(text_font);
+    profile_choice.set_text_size(FONT_SIZE);
+
+    for name in profile_names {
+        profile_choice.add_choice(name);
+    }
+    if !profile_names.is_empty() {
+        profile_choice.set_value(0);
+    }
 
     let type_labels = [
         ("Release", "release"),
@@ -583,27 +740,73 @@ pub fn setup_main_controls(
     let mut checkboxes = Vec::new();
 
     for (i, (label, _)) in type_labels.iter().enumerate() {
-        let mut cb = CheckButton::new(20 + i as i32 * 85, 95, 80, 20, *label);
+        let mut cb = CheckButton::new(
+            left_x + i as i32 * CHECKBOX_WIDTH,
+            CHECKBOX_Y,
+            CHECKBOX_WIDTH,
+            CHECKBOX_HEIGHT,
+            *label,
+        );
         cb.set_label_font(text_font);
-        cb.set_label_size(12);
+        cb.set_label_size(FONT_SIZE);
         cb.set_label_color(Color::White);
         cb.set_value(true);
         checkboxes.push(cb);
     }
 
-    let mut java_choice = Choice::new(400, 95, 180, 20, "");
+    let profile_button_width = (column_width - PADDING) / 2;
+
+    let mut new_profile = Button::new(
+        right_x,
+        CHECKBOX_Y,
+        profile_button_width,
+        CONTROL_HEIGHT,
+        "New Profile",
+    );
+    new_profile.set_label_font(text_font);
+    new_profile.set_label_size(FONT_SIZE);
+
+    let mut edit_profile = Button::new(
+        right_x + profile_button_width + PADDING / 2,
+        CHECKBOX_Y,
+        profile_button_width,
+        CONTROL_HEIGHT,
+        "Edit Profile",
+    );
+    edit_profile.set_label_font(text_font);
+    edit_profile.set_label_size(FONT_SIZE);
+    edit_profile.deactivate();
+
+    let mut java_label = Frame::new(
+        left_x,
+        JAVA_LABEL_Y,
+        JAVA_LABEL_WIDTH,
+        LABEL_HEIGHT,
+        "Java:",
+    );
+    java_label.set_label_font(text_font);
+    java_label.set_label_size(FONT_SIZE);
+    java_label.set_label_color(Color::White);
+    java_label.set_frame(FrameType::NoBox);
+    java_label.set_align(Align::Left | Align::Inside);
+
+    let mut java_choice = Choice::new(
+        left_x + JAVA_FIELD_WIDTH,
+        JAVA_LABEL_Y,
+        WIN_WIDTH - PADDING * 2 - JAVA_FIELD_WIDTH,
+        CONTROL_HEIGHT,
+        "",
+    );
     java_choice.set_color(Color::White);
     java_choice.set_text_font(text_font);
-    java_choice.set_text_size(12);
+    java_choice.set_text_size(FONT_SIZE);
 
     let java_installations = find_all_java_installations();
-
     let mut short_display_names = Vec::new();
 
     if !java_installations.is_empty() {
         for (path, version) in &java_installations {
             let path_str = path.to_string_lossy().to_string();
-
             let formatted_path = if cfg!(windows) {
                 path_str.replace('\\', "/")
             } else {
@@ -614,8 +817,6 @@ pub fn setup_main_controls(
             java_choice.add_choice(&display_text);
 
             let path = std::path::Path::new(&formatted_path);
-            let _filename = path.file_name().unwrap_or_default().to_string_lossy();
-
             let parent_dir = if let Some(parent) = path.parent() {
                 let dir_name = parent.file_name().unwrap_or_default().to_string_lossy();
                 if dir_name == "bin" {
@@ -644,56 +845,55 @@ pub fn setup_main_controls(
         java_choice.set_value(0);
     }
 
-    let mut profile_label = Frame::new(20, 125, 100, 20, "Profile:");
-    profile_label.set_label_font(text_font);
-    profile_label.set_label_size(12);
-    profile_label.set_label_color(Color::White);
-    profile_label.set_frame(FrameType::NoBox);
-    profile_label.set_align(Align::Left | Align::Inside);
+    let welcome_text = if !profile_names.is_empty() {
+        format!("Welcome, {}", profile_names[0])
+    } else {
+        "Welcome, Guest".to_string()
+    };
 
-    let mut profile_choice = Choice::new(20, 145, WIN_WIDTH - 40, 25, "");
-    profile_choice.set_color(Color::White);
-    profile_choice.set_text_font(text_font);
-    profile_choice.set_text_size(12);
+    let mut welcome_frame = Frame::new(
+        left_x,
+        BOTTOM_SECTION_Y,
+        WIN_WIDTH - PADDING * 2,
+        WELCOME_FRAME_HEIGHT,
+        welcome_text.as_str(),
+    );
+    welcome_frame.set_label_font(text_font);
+    welcome_frame.set_label_size(FONT_SIZE);
+    welcome_frame.set_label_color(Color::White);
+    welcome_frame.set_frame(FrameType::NoBox);
+    welcome_frame.set_align(Align::Center | Align::Inside);
 
-    for name in profile_names {
-        profile_choice.add_choice(name);
-    }
-    if !profile_names.is_empty() {
-        profile_choice.set_value(0);
-    }
-
-    let buttons_y = 175;
-
-    let mut new_profile = Button::new(20, buttons_y, 110, 25, "New Profile");
-    new_profile.set_label_font(text_font);
-    new_profile.set_label_size(12);
-
-    let mut edit_profile = Button::new(140, buttons_y, 110, 25, "Edit Profile");
-    edit_profile.set_label_font(text_font);
-    edit_profile.set_label_size(12);
-    edit_profile.deactivate();
-
-    let folder_button_width = 30;
-    let folder_button_height = 25;
-    let play_x = 310;
-    let play_y = buttons_y;
+    let buttons_y = BOTTOM_SECTION_Y + BUTTONS_Y_OFFSET;
+    let play_button_x =
+        (WIN_WIDTH - BUTTON_WIDTH - FOLDER_BUTTON_WIDTH - BUTTON_SPACING) / CENTER_DIVISOR;
 
     let mut folder_button = Button::new(
-        play_x - folder_button_width - 10,
-        play_y,
-        folder_button_width,
-        folder_button_height,
+        play_button_x,
+        buttons_y,
+        FOLDER_BUTTON_WIDTH,
+        BUTTON_HEIGHT,
         "",
     );
 
-    folder_button.set_image(Some(
-        load_image_from_data!("../themes/windows98/folder.png").unwrap(),
-    ));
-    folder_button.set_tooltip("Open launcher folder");
+    let folder_img = load_image_from_data!("../themes/windows98/folder.png").unwrap();
     folder_button.set_frame(FrameType::UpBox);
-    folder_button.set_color(Color::from_rgb(192, 192, 192));
-    folder_button.set_align(Align::Inside | Align::Top);
+    folder_button.set_color(GRAY_COLOR);
+    folder_button.set_tooltip("Open launcher folder");
+
+    let mut icon = folder_img.clone();
+    let icon_w = icon.width();
+    let icon_h = icon.height();
+
+    folder_button.draw(move |b| {
+        draw::draw_box(b.frame(), b.x(), b.y(), b.w(), b.h(), b.color());
+
+        let center_x = b.x() + (b.w() - icon_w) / 2;
+        let center_y = b.y() + (b.h() - icon_h) / 2;
+
+        icon.draw(center_x, center_y, icon_w, icon_h);
+    });
+
     folder_button.set_callback(move |_| {
         use crate::get_game_directory;
         let game_dir = get_game_directory();
@@ -720,55 +920,79 @@ pub fn setup_main_controls(
         }
     });
 
-    let mut play = Button::new(play_x, play_y, button_width, button_height, "Play");
-    play.set_label_font(text_font);
-    play.set_label_size(12);
-
-    let welcome_text = if !profile_names.is_empty() {
-        format!("Welcome, {}", profile_names[0])
-    } else {
-        "Welcome, Guest".to_string()
-    };
-
-    let mut welcome_frame = Frame::new(
-        play_x + button_width + 10,
-        play_y + 5,
-        220,
-        20,
-        welcome_text.as_str(),
+    let mut play = Button::new(
+        play_button_x + FOLDER_BUTTON_WIDTH + BUTTON_SPACING,
+        buttons_y,
+        BUTTON_WIDTH,
+        BUTTON_HEIGHT,
+        "Play",
     );
-    welcome_frame.set_label_font(text_font);
-    welcome_frame.set_label_size(12);
-    welcome_frame.set_label_color(Color::White);
-    welcome_frame.set_frame(FrameType::NoBox);
-    welcome_frame.set_align(Align::Left | Align::Inside);
+    play.set_label_font(text_font);
+    play.set_label_size(FONT_SIZE);
 
-    let status_y = buttons_y + 35;
+    let progress_section_y = buttons_y + BUTTON_HEIGHT + PROGRESS_MARGIN;
 
-    let mut progress_label = Frame::new(20, status_y - 10, 100, 20, "Progress:");
+    let mut progress_label = Frame::new(
+        left_x,
+        progress_section_y,
+        PROGRESS_LABEL_WIDTH,
+        LABEL_HEIGHT,
+        "Progress:",
+    );
     progress_label.set_label_font(text_font);
-    progress_label.set_label_size(12);
+    progress_label.set_label_size(FONT_SIZE);
     progress_label.set_label_color(Color::White);
     progress_label.set_frame(FrameType::NoBox);
     progress_label.set_align(Align::Left | Align::Inside);
 
-    let mut status_label = Frame::new(20, status_y, WIN_WIDTH - 40, 20, "");
+    let progress_bar_x = left_x + PROGRESS_LABEL_WIDTH;
+    let progress_bar_width = WIN_WIDTH - PADDING * 2 - PROGRESS_LABEL_WIDTH;
+
+    let mut status_label = Frame::new(
+        left_x,
+        progress_section_y + LABEL_HEIGHT,
+        WIN_WIDTH - PADDING * 2,
+        LABEL_HEIGHT,
+        "",
+    );
     status_label.set_label_font(text_font);
-    status_label.set_label_size(12);
+    status_label.set_label_size(FONT_SIZE);
     status_label.set_label_color(Color::White);
     status_label.set_frame(FrameType::NoBox);
     status_label.set_align(Align::Left | Align::Inside);
 
-    let progress_bar_y = status_y + 20;
-
-    let mut progress_frame = Frame::new(20, progress_bar_y, WIN_WIDTH - 40, 20, "");
+    let mut progress_frame = Frame::new(
+        progress_bar_x,
+        progress_section_y,
+        progress_bar_width,
+        LABEL_HEIGHT,
+        "",
+    );
     progress_frame.set_frame(FrameType::DownBox);
     progress_frame.set_color(Color::White);
 
-    let progress_bar = create_win98_progress_bar(20, progress_bar_y, WIN_WIDTH - 40, 20);
+    let progress_bar = create_win98_progress_bar(
+        progress_bar_x + PROGRESS_BORDER,
+        progress_section_y + PROGRESS_BORDER,
+        progress_bar_width - PROGRESS_BORDER * 2,
+        PROGRESS_HEIGHT,
+    );
 
     let mut update_dropdown = {
-        let versions_data = versions_data.clone();
+        let versions_data: Vec<(String, String)> = versions
+            .split('|')
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<&str>>()
+            .chunks(2)
+            .filter_map(|chunk| {
+                if chunk.len() == 2 {
+                    Some((chunk[0].to_string(), chunk[1].to_string()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
         let mut choice = version_choice.clone();
         let checkboxes = checkboxes.clone();
 
@@ -846,21 +1070,34 @@ pub fn setup_main_controls(
 
 pub fn setup_title_bar(title: &str, ico: &mut PngImage, font: Font, win: &Window) {
     let win_width = win.width();
+    const TITLE_FRAME_WIDTH: i32 = 300;
+    const TITLE_HEIGHT: i32 = 20;
+    const ICON_SIZE: i32 = 16;
+    const BTN_WIDTH: i32 = 16;
+    const BTN_HEIGHT: i32 = 14;
+    const TITLE_X: i32 = 24;
+    const TITLE_Y: i32 = 4;
+    const ICON_X: i32 = 8;
+    const ICON_Y: i32 = 12;
+    const CLOSE_OFFSET: i32 = 22;
+    const MAX_OFFSET: i32 = 39;
+    const MIN_OFFSET: i32 = 56;
+    const BTN_Y: i32 = 6;
 
-    let mut title_frame = Frame::new(24, 4, 300, 20, title);
+    let mut title_frame = Frame::new(TITLE_X, TITLE_Y, TITLE_FRAME_WIDTH, TITLE_HEIGHT, title);
     title_frame.set_label_color(Color::White);
     title_frame.set_label_font(font);
-    title_frame.set_label_size(12);
+    title_frame.set_label_size(FONT_SIZE);
     title_frame.set_align(Align::Left | Align::Inside);
     title_frame.set_frame(FrameType::NoBox);
 
-    let mut icon = Frame::new(8, 12, 16, 16, "");
-    ico.scale(16, 16, false, false);
+    let mut icon = Frame::new(ICON_X, ICON_Y, ICON_SIZE, ICON_SIZE, "");
+    ico.scale(ICON_SIZE, ICON_SIZE, false, false);
     icon.set_image(Some(ico.clone()));
 
     let is_main_window = win.label() == "Minecraft Launcher";
 
-    let mut close_btn = Button::new(win_width - 22, 6, 16, 14, "");
+    let mut close_btn = Button::new(win_width - CLOSE_OFFSET, BTN_Y, BTN_WIDTH, BTN_HEIGHT, "");
     close_btn.set_image(Some(
         load_image_from_data!("../themes/windows98/close.png").unwrap(),
     ));
@@ -876,7 +1113,7 @@ pub fn setup_title_bar(title: &str, ico: &mut PngImage, font: Font, win: &Window
         }
     });
 
-    let mut max_btn = Button::new(win_width - 39, 6, 16, 14, "");
+    let mut max_btn = Button::new(win_width - MAX_OFFSET, BTN_Y, BTN_WIDTH, BTN_HEIGHT, "");
     max_btn.set_image(Some(
         load_image_from_data!("../themes/windows98/maximize.png").unwrap(),
     ));
@@ -895,7 +1132,7 @@ pub fn setup_title_bar(title: &str, ico: &mut PngImage, font: Font, win: &Window
         }
     });
 
-    let mut min_btn = Button::new(win_width - 56, 6, 16, 14, "");
+    let mut min_btn = Button::new(win_width - MIN_OFFSET, BTN_Y, BTN_WIDTH, BTN_HEIGHT, "");
     min_btn.set_image(Some(
         load_image_from_data!("../themes/windows98/hide.png").unwrap(),
     ));
@@ -929,11 +1166,11 @@ pub fn handle_drag(win: &mut fltk::window::Window) {
 }
 
 pub fn create_win98_progress_bar(x: i32, y: i32, w: i32, h: i32) -> Frame {
-    let mut progress_frame = Frame::new(x, y, w, h, "");
-    progress_frame.set_frame(FrameType::DownBox);
-    progress_frame.set_color(Color::White);
+    unsafe {
+        MAX_PROGRESS_WIDTH = w;
+    }
 
-    let mut progress_bar = Frame::new(x + 2, y + 2, 0, h - 4, "");
+    let mut progress_bar = Frame::new(x, y, 0, h, "");
     progress_bar.set_frame(FrameType::FlatBox);
 
     progress_bar.draw(move |f| {
@@ -942,17 +1179,25 @@ pub fn create_win98_progress_bar(x: i32, y: i32, w: i32, h: i32) -> Frame {
         let fx = f.x();
         let fy = f.y();
 
-        let win98_blue = Color::from_rgb(0, 0, 128);
-        let block_width = 8;
-        let block_spacing = 2;
+        if fw <= 0 {
+            return;
+        }
 
-        let max_blocks = fw / (block_width + block_spacing);
+        let win98_blue = Color::from_rgb(0, 0, 128);
+        const BLOCK_WIDTH: i32 = 8;
+        const BLOCK_SPACING: i32 = 2;
+
+        let max_blocks = fw / (BLOCK_WIDTH + BLOCK_SPACING);
 
         for i in 0..max_blocks {
-            let bx = fx + i * (block_width + block_spacing);
-            if bx + block_width <= fx + fw {
-                fltk::draw::draw_rect_fill(bx, fy, block_width, fh, win98_blue);
-            }
+            let bx = fx + i * (BLOCK_WIDTH + BLOCK_SPACING);
+            fltk::draw::draw_rect_fill(bx, fy, BLOCK_WIDTH, fh, win98_blue);
+        }
+
+        let remaining_width = fw % (BLOCK_WIDTH + BLOCK_SPACING);
+        if remaining_width > 0 && remaining_width <= BLOCK_WIDTH {
+            let bx = fx + max_blocks * (BLOCK_WIDTH + BLOCK_SPACING);
+            fltk::draw::draw_rect_fill(bx, fy, remaining_width, fh, win98_blue);
         }
     });
 
@@ -960,8 +1205,12 @@ pub fn create_win98_progress_bar(x: i32, y: i32, w: i32, h: i32) -> Frame {
 }
 
 pub fn update_win98_progress_bar(progress_bar: &mut Frame, percentage: f64) {
-    let total_width = progress_bar.parent().unwrap().w() - 4; // Учитываем отступы
-    let width = (percentage / 100.0 * (total_width as f64)) as i32;
-    progress_bar.set_size(width, progress_bar.h());
+    let percentage = percentage.max(0.0).min(100.0);
+    let max_width = unsafe { MAX_PROGRESS_WIDTH };
+
+    let new_width = ((percentage / 100.0) * (max_width as f64)) as i32;
+    let final_width = new_width.max(0).min(max_width);
+
+    progress_bar.set_size(final_width, progress_bar.h());
     progress_bar.redraw();
 }
