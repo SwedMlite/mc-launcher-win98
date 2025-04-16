@@ -237,7 +237,7 @@ pub fn edit_profile_dialog(text_font: Font, profile: &Profile) -> Option<Profile
     result.lock().unwrap().clone()
 }
 
-pub fn setup_font(app: app::App, _font_path: &str) -> Font {
+pub fn setup_font(app: app::App) -> Font {
     let font_data = include_bytes!("../themes/windows98/ms-sans-serif-1.ttf");
 
     #[cfg(target_os = "windows")]

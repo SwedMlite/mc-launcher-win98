@@ -29,7 +29,7 @@ fn main() {
     let (error_message, _font_for_error) = setup_error_handler();
 
     let app = app::App::default();
-    let font = gui::setup_font(app, "");
+    let font = gui::setup_font(app);
 
     let win = setup_window(font);
 

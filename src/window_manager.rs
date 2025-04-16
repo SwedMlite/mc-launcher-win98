@@ -1,10 +1,15 @@
-use fltk::{enums::Font, window::Window};
-use fltk::prelude::{WidgetBase, WidgetExt, GroupExt,WindowExt};
+use fltk::{
+    enums::Font,
+    prelude::{GroupExt, WidgetBase, WidgetExt, WindowExt},
+    window::Window,
+};
 
 #[cfg(target_os = "windows")]
-use crate::windows::{adjust_window, set_window_icon};
+use crate::windows::adjust_window;
 
-use crate::gui::{handle_drag, setup_frame, setup_tiled_background, setup_title_bar, WIN_HEIGHT, WIN_WIDTH};
+use crate::gui::{
+    WIN_HEIGHT, WIN_WIDTH, handle_drag, setup_frame, setup_tiled_background, setup_title_bar,
+};
 
 macro_rules! load_image_from_data {
     ($path:expr) => {
@@ -24,22 +29,20 @@ pub fn setup_window(font: Font) -> Window {
         font,
         &win,
     );
-    
+
     win
 }
 
 pub fn finalize_window(mut win: Window) {
     handle_drag(&mut win);
     win.end();
-    
-    #[cfg(target_os = "windows")]
-    set_window_icon(
-        &mut win,
-        &load_image_from_data!("../themes/minecraft_icon.png").unwrap(),
-    );
-    
+
+    win.set_icon(Some(
+        load_image_from_data!("../themes/minecraft_icon.png").unwrap(),
+    ));
+
     win.show();
-    
+
     #[cfg(target_os = "windows")]
     adjust_window(&win);
 }

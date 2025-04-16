@@ -1,7 +1,9 @@
 use crate::models::Profile;
-use std::fs::{self, File};
-use std::io::{BufReader, BufWriter};
-use std::path::Path;
+use std::{
+    fs::{self, File},
+    io::{BufReader, BufWriter},
+    path::Path,
+};
 
 pub fn read_profiles(path: &Path) -> Result<Vec<Profile>, Box<dyn std::error::Error>> {
     if path.exists() {

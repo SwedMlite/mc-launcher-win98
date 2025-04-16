@@ -1,7 +1,5 @@
-use serde::Deserialize;
-use serde::Serialize;
-use std::cmp::min;
-use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+use std::{cmp::min, collections::HashMap};
 
 #[derive(Debug, Deserialize)]
 pub struct VersionManifest {

@@ -1,12 +1,8 @@
-use crate::downloader;
-use crate::models::{LaunchProgress, LaunchStage, VersionData};
-use std::fs;
-use std::io;
-use std::path::PathBuf;
-use std::process::Command;
-use std::sync::mpsc;
-use std::thread;
-use std::time::Duration;
+use crate::{
+    downloader,
+    models::{LaunchProgress, LaunchStage, VersionData},
+};
+use std::{fs, io, path::PathBuf, process::Command, sync::mpsc, thread, time::Duration};
 
 pub fn launch_minecraft(
     version_id: &str,

@@ -1,12 +1,11 @@
+use crate::{gui::setup_font, gui::show_error_dialog};
 use dirs;
-use fltk::app;
-use fltk::enums::Font;
-use std::env;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-
-use crate::gui::show_error_dialog;
-use crate::gui::setup_font;
+use fltk::{app, enums::Font};
+use std::{
+    env,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 pub fn get_game_directory() -> PathBuf {
     let path = if cfg!(target_os = "windows") {
@@ -27,7 +26,11 @@ pub fn get_game_directory() -> PathBuf {
     };
 
     if let Err(e) = std::fs::create_dir_all(&path) {
-        eprintln!("Warning: Failed to create game directory: {}", e);
+        let font = setup_font(app::App::default());
+        show_error_dialog(
+            &format!("Warning: Failed to create game directory: {}", e),
+            font,
+        );
     }
 
     path
@@ -37,7 +40,7 @@ pub fn setup_error_handler() -> (Arc<Mutex<Option<String>>>, Font) {
     let error_message = Arc::new(Mutex::new(None::<String>));
     let error_for_awake = error_message.clone();
 
-    let font_for_error = setup_font(app::App::default(), "");
+    let font_for_error = setup_font(app::App::default());
     app::add_idle3(move |_| {
         let mut error = error_for_awake.lock().unwrap();
         if let Some(msg) = error.take() {
@@ -47,6 +50,6 @@ pub fn setup_error_handler() -> (Arc<Mutex<Option<String>>>, Font) {
             });
         }
     });
-    
+
     (error_message, font_for_error)
-} 
+}

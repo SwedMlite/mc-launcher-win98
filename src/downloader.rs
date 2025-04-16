@@ -1,10 +1,14 @@
 use crate::models::{AssetIndexData, Extract, Library, VersionData};
-use rayon::ThreadPoolBuilder;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use std::error::Error;
-use std::fs::{self, File};
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use rayon::{
+    ThreadPoolBuilder,
+    iter::{IntoParallelRefIterator, ParallelIterator},
+};
+use std::{
+    error::Error,
+    fs::{self, File},
+    io::{self, Write},
+    path::{Path, PathBuf},
+};
 use zip::ZipArchive;
 
 pub fn download_file(url: &str, dest_path: &Path) -> Result<(), Box<dyn Error>> {

@@ -1,18 +1,24 @@
-use fltk::{app, frame::Frame, menu::Choice, button::Button, prelude::*};
-use std::sync::{Arc, Mutex};
-use std::fs;
-use std::path::PathBuf;
+use crate::{
+    app_init::get_game_directory,
+    downloader::download_file,
+    gui::*,
+    java_finder::find_compatible_java,
+    launcher::launch_minecraft,
+    models::{self, Profile},
+    profiles::{read_profiles, write_profiles},
+    version_manager::{fetch_version_data, get_version_link},
+};
+use fltk::{app, button::Button, frame::Frame, menu::Choice, prelude::*};
+use std::{
+    fs,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
-use crate::app_init::get_game_directory;
-use crate::downloader::download_file;
-use crate::gui::*;
-use crate::java_finder::find_compatible_java;
-use crate::launcher::launch_minecraft;
-use crate::models::{self, Profile};
-use crate::profiles::{read_profiles, write_profiles};
-use crate::version_manager::{fetch_version_data, get_version_link};
-
-pub fn initialize_profiles(profiles_path: &PathBuf, font: fltk::enums::Font) -> (Arc<Mutex<Vec<Profile>>>, Vec<String>) {
+pub fn initialize_profiles(
+    profiles_path: &PathBuf,
+    font: fltk::enums::Font,
+) -> (Arc<Mutex<Vec<Profile>>>, Vec<String>) {
     let profiles = Arc::new(Mutex::new(match read_profiles(&profiles_path) {
         Ok(profiles) => profiles,
         Err(e) => {
@@ -20,14 +26,14 @@ pub fn initialize_profiles(profiles_path: &PathBuf, font: fltk::enums::Font) -> 
             Vec::new()
         }
     }));
-    
+
     let profile_names: Vec<String> = profiles
         .lock()
         .unwrap()
         .iter()
         .map(|p| p.username.clone())
         .collect();
-        
+
     (profiles, profile_names)
 }
 
@@ -108,7 +114,7 @@ pub fn setup_play_button_callback(
     font: fltk::enums::Font,
 ) {
     let profiles_clone = profiles.clone();
-    
+
     play_button.set_callback(move |_| {
         let username = match profile_choice.choice() {
             Some(selected) => selected,
@@ -136,7 +142,7 @@ pub fn setup_play_button_callback(
                 return;
             }
         };
-        
+
         let version_data = match fetch_version_data(&version_json_url) {
             Ok(data) => data,
             Err(e) => {
@@ -183,11 +189,17 @@ pub fn setup_play_button_callback(
                 if let Some(required_version) = version_data.get_required_java_version() {
                     match find_compatible_java(required_version, false) {
                         Some(java_path) => {
-                            status_label_clone.set_label(&format!("Found compatible Java version {}", required_version));
+                            status_label_clone.set_label(&format!(
+                                "Found compatible Java version {}",
+                                required_version
+                            ));
                             Some(java_path)
-                        },
+                        }
                         None => {
-                            status_label_clone.set_label(&format!("Warning: Required Java {} not found", required_version));
+                            status_label_clone.set_label(&format!(
+                                "Warning: Required Java {} not found",
+                                required_version
+                            ));
                             None
                         }
                     }
@@ -198,25 +210,30 @@ pub fn setup_play_button_callback(
         };
 
         let mut progress_bar_clone = progress_bar.clone();
-        
+
         status_label_clone.set_label("Preparing to launch Minecraft...");
         progress_bar_clone.show();
         progress_bar_clone.set_size(0, progress_bar_clone.h());
         app::redraw();
         app::flush();
-        
+
         let (sender, receiver) = std::sync::mpsc::channel::<models::LaunchProgress>();
-        
-        setup_progress_monitoring(receiver, progress_bar.clone(), status_label.clone(), error_message.clone());
-        
+
+        setup_progress_monitoring(
+            receiver,
+            progress_bar.clone(),
+            status_label.clone(),
+            error_message.clone(),
+        );
+
         launch_minecraft_process(
-            version_id, 
-            username, 
-            version_data, 
-            java_path_to_use, 
-            profiles_clone.clone(), 
-            sender, 
-            error_message.clone()
+            version_id,
+            username,
+            version_data,
+            java_path_to_use,
+            profiles_clone.clone(),
+            sender,
+            error_message.clone(),
         );
     });
 }
@@ -231,41 +248,44 @@ fn setup_progress_monitoring(
         let mut progress_bar_clone = progress_bar.clone();
         let mut status_label_clone = status_label.clone();
         let error_msg_clone = error_msg.clone();
-        
+
         move |handle| {
             match receiver.try_recv() {
                 Ok(progress) => {
                     let percentage = progress.percentage();
-                    
+
                     update_win98_progress_bar(&mut progress_bar_clone, percentage);
-                    
+
                     let status_text = progress.message.clone();
-                    
+
                     if progress.stage == models::LaunchStage::Complete {
-                        let error_keywords = ["error", "failed", "crashed", "exited", "unexpectedly"];
-                        
-                        if error_keywords.iter().any(|&keyword| status_text.to_lowercase().contains(keyword)) {
+                        let error_keywords =
+                            ["error", "failed", "crashed", "exited", "unexpectedly"];
+
+                        if error_keywords
+                            .iter()
+                            .any(|&keyword| status_text.to_lowercase().contains(keyword))
+                        {
                             let mut error = error_msg_clone.lock().unwrap();
                             *error = Some(status_text.clone());
-                            
+
                             app::awake();
                         }
-                        
+
                         progress_bar_clone.hide();
                     }
-                    
+
                     status_label_clone.set_label(&status_text);
                     app::redraw();
                 }
-                Err(std::sync::mpsc::TryRecvError::Empty) => {
-                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
                     progress_bar_clone.hide();
                     app::redraw();
                     return;
                 }
             };
-            
+
             app::repeat_timeout3(0.01, handle);
         }
     });
@@ -282,7 +302,7 @@ fn launch_minecraft_process(
 ) {
     let error_msg_clone = error_msg.clone();
     let profiles_clone = profiles.clone();
-    
+
     std::thread::spawn(move || {
         let jvm_args = profiles_clone
             .lock()
@@ -313,4 +333,4 @@ fn launch_minecraft_process(
             app::awake();
         }
     });
-} 
+}

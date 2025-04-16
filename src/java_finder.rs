@@ -1,6 +1,8 @@
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+};
 
 pub fn find_all_java_installations() -> Vec<(PathBuf, String)> {
     let mut java_installations = Vec::new();
