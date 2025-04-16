@@ -210,7 +210,6 @@ pub fn download_and_extract_assets(
 
     let required_assets: Vec<_> = assets_to_download
         .iter()
-        // Фильтруем только самые важные ассеты для запуска
         .filter(|(_, _, path)| {
             path.contains("minecraft/sounds/ui/")
                 || path.contains("minecraft/sounds/random/click")
